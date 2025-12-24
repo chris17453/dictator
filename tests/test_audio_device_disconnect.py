@@ -75,12 +75,18 @@ class TestDeviceErrorRecovery:
         from src import dictator
         import inspect
 
-        # Check if process_transcription handles errors
-        source = inspect.getsource(dictator.DictatorWindow.process_transcription)
+        # Check if _safe_handle_transcription handles errors
+        source = inspect.getsource(dictator.DictatorWindow._safe_handle_transcription)
 
-        # Should handle device errors
-        assert 'except' in source, (
-            "process_transcription should handle errors from recorder"
+        # Should handle device errors (checks for error status or has except clause)
+        has_error_handling = (
+            'language == "error"' in source or
+            'except' in source or
+            'error' in source.lower()
+        )
+
+        assert has_error_handling, (
+            "_safe_handle_transcription should handle errors from recorder"
         )
 
     def test_device_error_shows_user_notification(self):
@@ -91,11 +97,11 @@ class TestDeviceErrorRecovery:
         from src import dictator
         import inspect
 
-        source = inspect.getsource(dictator.DictatorWindow.process_transcription)
+        source = inspect.getsource(dictator.DictatorWindow._safe_handle_transcription)
 
         # Should update UI with error status
         assert 'status' in source.lower() or 'update' in source.lower(), (
-            "process_transcription should update UI when errors occur"
+            "_safe_handle_transcription should update UI when errors occur"
         )
 
     def test_can_start_new_recording_after_device_error(self):

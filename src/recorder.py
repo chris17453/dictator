@@ -206,6 +206,11 @@ class PureRecorder:
     
     def get_microphone_list(self):
         return self.available_microphones
+
+    def get_audio_devices(self):
+        """Refresh and return list of available audio devices"""
+        self.refresh_microphones()
+        return self.available_microphones
     
     def set_microphone(self, device_index):
         """Set microphone by device index (not array index)"""
@@ -233,17 +238,40 @@ class PureRecorder:
         return None
     
     def start_recording(self, callback):
+        """Start recording with device validation and error handling"""
         if self.is_recording:
             return
-        
-        self.is_recording = True
-        self.callback = callback
-        log.debug(f"CALLBACK SET TO: {callback}")
-        
-        log.info(f"Starting recording with microphone index: {self.current_microphone_index}")
-        thread = threading.Thread(target=self._record_worker)
-        thread.daemon = True
-        thread.start()
+
+        # Validate device before starting
+        try:
+            if self.current_microphone_index is None:
+                log.error("No microphone selected - cannot start recording")
+                if callback:
+                    callback("", "error")
+                return
+
+            # Check if device still exists
+            current_mic = self.get_current_microphone()
+            if not current_mic:
+                log.error(f"Microphone device {self.current_microphone_index} no longer available")
+                if callback:
+                    callback("Device disconnected", "error")
+                return
+
+            self.is_recording = True
+            self.callback = callback
+            log.debug(f"CALLBACK SET TO: {callback}")
+
+            log.info(f"Starting recording with microphone index: {self.current_microphone_index}")
+            thread = threading.Thread(target=self._record_worker)
+            thread.daemon = True
+            thread.start()
+
+        except Exception as e:
+            log.error(f"Error starting recording: {e}")
+            self.is_recording = False
+            if callback:
+                callback(f"Error: {e}", "error")
     
     def stop_recording(self):
         log.debug(" RECORDER: stop_recording called")
