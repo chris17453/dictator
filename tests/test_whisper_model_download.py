@@ -249,7 +249,7 @@ class TestDownloadCompletion:
 
             # Simulate download completion
             if hasattr(dialog, '_on_download_complete'):
-                dialog._on_download_complete()
+                dialog._on_download_complete('tiny')
                 # Should show success
                 # Verified through implementation
 

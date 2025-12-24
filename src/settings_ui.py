@@ -273,6 +273,60 @@ class SettingsDialog(QDialog):
         self.device_combo.setStyleSheet(self.model_combo.styleSheet())
         whisper_layout.addRow("Compute Device:", self.device_combo)
 
+        # Model download section
+        download_container = QWidget()
+        download_layout = QVBoxLayout(download_container)
+        download_layout.setContentsMargins(0, 10, 0, 0)
+
+        # Download button
+        self.download_model_btn = QPushButton("Download Selected Model")
+        self.download_model_btn.clicked.connect(self.download_whisper_model)
+        self.download_model_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:disabled {
+                background-color: #666;
+                color: #999;
+            }
+        """)
+        download_layout.addWidget(self.download_model_btn)
+
+        # Status label
+        self.download_status = QLabel("")
+        self.download_status.setStyleSheet("color: #ccc; font-size: 12px; padding: 5px;")
+        download_layout.addWidget(self.download_status)
+
+        # Progress bar
+        self.download_progress = QProgressBar()
+        self.download_progress.setRange(0, 100)
+        self.download_progress.setValue(0)
+        self.download_progress.setTextVisible(True)
+        self.download_progress.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                text-align: center;
+                background-color: #333;
+                color: white;
+            }
+            QProgressBar::chunk {
+                background-color: #4CAF50;
+            }
+        """)
+        self.download_progress.hide()  # Initially hidden
+        download_layout.addWidget(self.download_progress)
+
+        whisper_layout.addRow("", download_container)
+
         audio_layout.addWidget(whisper_group)
 
         tabs.addTab(audio_tab, "Audio")
@@ -686,6 +740,137 @@ class SettingsDialog(QDialog):
 
         if directory:
             self.model_dir_input.setText(directory)
+
+    def download_whisper_model(self):
+        """Download the selected Whisper model"""
+        import threading
+        from pathlib import Path
+
+        # Get selected model and directory
+        model_size = self.model_combo.currentText()
+        model_dir = self.model_dir_input.text() or str(Path.home() / ".config" / "dictator" / "models")
+        device = self.device_combo.currentText()
+
+        # Create model directory if it doesn't exist
+        try:
+            Path(model_dir).mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            log.error(f"Failed to create model directory: {e}")
+            if self.parent_window and hasattr(self.parent_window, 'show_error_dialog'):
+                self.parent_window.show_error_dialog(
+                    "Download Error",
+                    f"Could not create model directory.\n\n"
+                    f"Error: {e}\n\n"
+                    f"Please check permissions on: {model_dir}"
+                )
+            return
+
+        log.info(f"Starting download of Whisper {model_size} model to {model_dir}")
+
+        # Update UI for download start
+        self.download_model_btn.setEnabled(False)
+        self.download_status.setText(f"Downloading {model_size} model...")
+        self.download_progress.setValue(0)
+        self.download_progress.show()
+
+        # Download in background thread to avoid freezing UI
+        def download_thread():
+            try:
+                # Import here to avoid issues if faster_whisper not installed
+                from faster_whisper import WhisperModel
+
+                # Determine device
+                if device == "auto":
+                    try:
+                        import torch
+                        actual_device = "cuda" if torch.cuda.is_available() else "cpu"
+                    except ImportError:
+                        actual_device = "cpu"
+                else:
+                    actual_device = device
+
+                log.info(f"Downloading model with device={actual_device}, download_root={model_dir}")
+
+                # Create WhisperModel - this triggers download if not present
+                # Note: We can't easily track progress with faster_whisper, so just show indeterminate
+                self.download_progress.setRange(0, 0)  # Indeterminate progress
+
+                model = WhisperModel(
+                    model_size,
+                    device=actual_device,
+                    download_root=model_dir
+                )
+
+                # If we got here, download succeeded
+                log.info(f"Successfully downloaded {model_size} model")
+
+                # Update UI on main thread using QTimer
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(0, lambda: self._on_download_complete(model_size))
+
+            except Exception as e:
+                log.error(f"Failed to download model: {e}")
+
+                # Show error dialog on main thread using QTimer
+                from PyQt6.QtCore import QTimer
+                QTimer.singleShot(0, lambda: self._on_download_error(str(e)))
+
+        # Start download thread
+        thread = threading.Thread(target=download_thread, daemon=True)
+        thread.start()
+
+    def _on_download_complete(self, model_size):
+        """Called when download completes successfully"""
+        log.info(f"Download of {model_size} model complete")
+
+        # Update UI
+        self.download_progress.setRange(0, 100)
+        self.download_progress.setValue(100)
+        self.download_status.setText(f"✓ {model_size} model downloaded successfully!")
+        self.download_status.setStyleSheet("color: #4CAF50; font-size: 12px; padding: 5px;")
+
+        # Re-enable button after 2 seconds
+        QTimer.singleShot(2000, self._reset_download_ui)
+
+        # Show success message
+        if self.parent_window and hasattr(self.parent_window, 'show_error_dialog'):
+            # Use QMessageBox directly for success
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Information)
+            msg_box.setWindowTitle("Download Complete")
+            msg_box.setText(f"Whisper {model_size} model downloaded successfully!")
+            msg_box.setInformativeText("The model is now ready to use.")
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.exec()
+
+    def _on_download_error(self, error_msg):
+        """Called when download fails"""
+        log.error(f"Download error: {error_msg}")
+
+        # Update UI
+        self.download_progress.hide()
+        self.download_status.setText(f"✗ Download failed")
+        self.download_status.setStyleSheet("color: #f44336; font-size: 12px; padding: 5px;")
+        self.download_model_btn.setEnabled(True)
+
+        # Show error dialog
+        if self.parent_window and hasattr(self.parent_window, 'show_error_dialog'):
+            self.parent_window.show_error_dialog(
+                "Model Download Failed",
+                f"Could not download Whisper model.\n\n"
+                f"Error: {error_msg}\n\n"
+                f"Please check:\n"
+                f"• Internet connection is active\n"
+                f"• Disk space is sufficient\n"
+                f"• Directory permissions are correct"
+            )
+
+    def _reset_download_ui(self):
+        """Reset download UI to initial state"""
+        self.download_progress.hide()
+        self.download_status.setText("")
+        self.download_status.setStyleSheet("color: #ccc; font-size: 12px; padding: 5px;")
+        self.download_model_btn.setEnabled(True)
 
     def load_whisper_settings(self):
         """Load Whisper model settings from parent window config"""
