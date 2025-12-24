@@ -64,3 +64,6 @@ temp/
 # Config files that might contain sensitive data
 config.json
 settings.json
+
+# AI documentation and temporary files
+ai-temp/
