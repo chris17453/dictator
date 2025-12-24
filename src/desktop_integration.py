@@ -44,27 +44,27 @@ def install_desktop_files():
             target_desktop = applications_dir / "dictator.desktop"
             shutil.copy2(desktop_file, target_desktop)
             target_desktop.chmod(0o755)
-            print(f"✅ Desktop entry installed: {target_desktop}")
+            log.info(f"Desktop entry installed: {target_desktop}")
         
         # Copy icon if it exists
         icon_file = desktop_dir / "dictator.png"
         if icon_file.exists():
             target_icon = icons_dir / "dictator.png"
             shutil.copy2(icon_file, target_icon)
-            print(f"✅ Icon installed: {target_icon}")
+            log.info(f"Icon installed: {target_icon}")
         
         # Update desktop database
         try:
             subprocess.run(["update-desktop-database", str(applications_dir)], 
                          check=False, capture_output=True)
-            print("✅ Desktop database updated")
+            log.info(" Desktop database updated")
         except (FileNotFoundError, subprocess.SubprocessError):
-            print("⚠️ Could not update desktop database (update-desktop-database not found)")
+            log.warning(" Could not update desktop database (update-desktop-database not found)")
         
         return True
         
     except Exception as e:
-        print(f"❌ Desktop integration failed: {e}")
+        log.error(f"❌ Desktop integration failed: {e}")
         return False
 
 
@@ -77,27 +77,27 @@ def uninstall_desktop_files():
         desktop_file = home / ".local" / "share" / "applications" / "dictator.desktop"
         if desktop_file.exists():
             desktop_file.unlink()
-            print(f"✅ Desktop entry removed: {desktop_file}")
+            log.info(f"Desktop entry removed: {desktop_file}")
         
         # Remove icon
         icon_file = home / ".local" / "share" / "pixmaps" / "dictator.png"
         if icon_file.exists():
             icon_file.unlink()
-            print(f"✅ Icon removed: {icon_file}")
+            log.info(f"Icon removed: {icon_file}")
         
         # Update desktop database
         try:
             applications_dir = home / ".local" / "share" / "applications"
             subprocess.run(["update-desktop-database", str(applications_dir)], 
                          check=False, capture_output=True)
-            print("✅ Desktop database updated")
+            log.info(" Desktop database updated")
         except (FileNotFoundError, subprocess.SubprocessError):
             pass
         
         return True
         
     except Exception as e:
-        print(f"❌ Desktop uninstall failed: {e}")
+        log.error(f"❌ Desktop uninstall failed: {e}")
         return False
 
 
@@ -117,8 +117,8 @@ def setup_application_properties(app: QApplication):
     
     # These help GNOME match windows to the desktop file
     # The WM_CLASS should match the StartupWMClass in the desktop file
-    print(f"✅ Set application name: {app.applicationName()}")
-    print(f"✅ Set desktop file name: dictator")
+    log.info(f"Set application name: {app.applicationName()}")
+    log.info(f"Set desktop file name: dictator")
 
 
 def setup_gnome_integration():
@@ -130,8 +130,8 @@ def setup_gnome_integration():
     
     This function is kept for backward compatibility but does nothing.
     """
-    print("ℹ️  Desktop integration is handled by pip install")
-    print("   Desktop files and icons are installed automatically")
+    log.debug("ℹ️  Desktop integration is handled by pip install")
+    log.debug("   Desktop files and icons are installed automatically")
     return {
         'desktop_file': 'Installed via pip to /usr/share/applications/',
         'installed_icons': 'Installed via pip to /usr/share/icons/hicolor/'
@@ -151,10 +151,10 @@ def check_wm_class():
             lines = result.stdout.split('\n')
             for line in lines:
                 if 'WM_CLASS' in line:
-                    print(f"🔍 Current WM_CLASS: {line.strip()}")
+                    log.debug(f"🔍 Current WM_CLASS: {line.strip()}")
                     return line.strip()
     except Exception as e:
-        print(f"⚠️ Could not check WM_CLASS: {e}")
+        log.warning(f"Could not check WM_CLASS: {e}")
     return None
 
 

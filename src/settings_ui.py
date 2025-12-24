@@ -430,7 +430,7 @@ class SettingsDialog(QDialog):
         clear_session_btn.clicked.connect(self.clear_current_session)
         clear_session_btn.setStyleSheet("QPushButton { background-color: #FF9800; }")
         
-        clear_all_btn = QPushButton("⚠️ Clear All History")
+        clear_all_btn = QPushButton("Clear All History")
         clear_all_btn.clicked.connect(self.clear_all_history)
         clear_all_btn.setStyleSheet("QPushButton { background-color: #f44336; }")
         
@@ -512,7 +512,7 @@ class SettingsDialog(QDialog):
             current_opacity = self.parent_window.current_opacity_percent
             self.opacity_slider.setValue(current_opacity)
             self.opacity_label.setText(f"Opacity: {current_opacity}%")
-            print(f"🔥 SETTINGS: Loaded opacity slider value: {current_opacity}%")
+            log.info(f"SETTINGS: Loaded opacity slider value: {current_opacity}%")
         
         # Load current microphone selection
         if hasattr(self.parent_window, 'recorder') and hasattr(self.parent_window.recorder, 'current_microphone_index'):
@@ -523,7 +523,7 @@ class SettingsDialog(QDialog):
                     item_data = self.microphone_combo.itemData(i)
                     if item_data == current_mic_index:
                         self.microphone_combo.setCurrentIndex(i)
-                        print(f"🔥 SETTINGS: Set microphone combo to index {i} for device {current_mic_index}")
+                        log.debug(f"SETTINGS: Set microphone combo to index {i} for device {current_mic_index}")
                         break
         
         # Load current colors into buttons
@@ -586,13 +586,13 @@ class SettingsDialog(QDialog):
                 
                 # Add item with device index as data
                 self.microphone_combo.addItem(f"[{device_index}] {device_name}", device_index)
-                print(f"🔥 REFRESH_MIC: Added device {device_index}: {device_name}")
+                log.debug(f"REFRESH_MIC: Added device {device_index}: {device_name}")
                 
                 # Select current microphone
                 if hasattr(self.parent_window.recorder, 'current_microphone_index'):
                     if device_index == self.parent_window.recorder.current_microphone_index:
                         self.microphone_combo.setCurrentIndex(i)
-                        print(f"🔥 REFRESH_MIC: Selected current device at combo index {i}")
+                        log.debug(f"REFRESH_MIC: Selected current device at combo index {i}")
     
     def update_opacity_alpha(self, value):
         """Update opacity using alpha channel (actually works!)"""
@@ -908,8 +908,8 @@ class SettingsDialog(QDialog):
         if not self.parent_window:
             return
         
-        reply = QMessageBox.question(self, "Clear All History", 
-            "⚠️ WARNING: This will permanently delete ALL history including all sessions!\n\n"
+        reply = QMessageBox.question(self, "Clear All History",
+            "WARNING: This will permanently delete ALL history including all sessions!\n\n"
             "This action cannot be undone. Are you sure?")
         
         if reply == QMessageBox.StandardButton.Yes:
@@ -1274,11 +1274,11 @@ class SettingsDialog(QDialog):
             if device_index is not None:
                 success = self.parent_window.recorder.set_microphone(device_index)
                 if success:
-                    print(f"🔥 SETTINGS: Applied microphone selection: device index {device_index}")
+                    log.info(f"SETTINGS: Applied microphone selection: device index {device_index}")
                     # Save config immediately to persist the change
                     self.parent_window.save_config()
                 else:
-                    print(f"🚨 SETTINGS: Failed to apply microphone selection: device index {device_index}")
+                    log.error(f"SETTINGS: Failed to apply microphone selection: device index {device_index}")
         
         # Apply opacity using alpha channel (always works!)
         if hasattr(self, 'opacity_slider'):

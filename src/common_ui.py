@@ -54,7 +54,7 @@ class DraggableFrame(QFrame):
             # Use Qt's native window dragging through compositor
             window_handle = self.parent_window.windowHandle()
             if window_handle:
-                print("🔄 Starting compositor drag")
+                log.info(" Starting compositor drag")
                 window_handle.startSystemMove()
             event.accept()
     
@@ -105,7 +105,7 @@ class ResizeGrip(QLabel):
         if event.button() == Qt.MouseButton.LeftButton:
             window_handle = self.parent_window.windowHandle()
             if window_handle:
-                print(f"🔄 Starting compositor resize: {self.direction}")
+                log.info(f"Starting compositor resize: {self.direction}")
                 # Map direction to Qt resize edge
                 if self.direction == "southeast":
                     window_handle.startSystemResize(Qt.Edge.RightEdge | Qt.Edge.BottomEdge)

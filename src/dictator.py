@@ -136,20 +136,20 @@ class DictatorWindow(QMainWindow):
             while True:
                 try:
                     request = self.ui_update_queue.get_nowait()
-                    print(f"🔥 PROCESSING UI UPDATE: {request.action}")
+                    log.debug(f"PROCESSING UI UPDATE: {request.action}")
                     self._handle_ui_update(request)
                     processed_count += 1
-                    print(f"🔥 UI UPDATE COMPLETED: {request.action}")
+                    log.debug(f"UI UPDATE COMPLETED: {request.action}")
                     
                     # Process max 10 updates per cycle to avoid blocking
                     if processed_count >= 10:
-                        print(f"🔥 Processed {processed_count} updates, yielding control")
+                        log.debug(f"Processed {processed_count} updates, yielding control")
                         break
                         
                 except queue.Empty:
                     break
         except Exception as e:
-            print(f"🚨 FATAL UI update error: {e}")
+            log.error(f"FATAL UI update error: {e}")
             import traceback
             traceback.print_exc()
             # Don't crash the whole app, just log the error
@@ -169,18 +169,18 @@ class DictatorWindow(QMainWindow):
                 style = request.kwargs.get('style', '')
                 self._safe_update_status(status, style)
             elif request.action == "toggle_recording":
-                print("🔥 UI_UPDATE: Processing toggle_recording from hotkey")
+                log.debug(" UI_UPDATE: Processing toggle_recording from hotkey")
                 self._safe_toggle_recording()
             elif request.action == "copy_to_clipboard":
                 text = request.kwargs.get('text', '')
-                print("🔥 UI_UPDATE: Processing copy_to_clipboard")
+                log.debug(" UI_UPDATE: Processing copy_to_clipboard")
                 self._safe_copy_to_clipboard(text)
             elif request.action == "type_text":
                 text = request.kwargs.get('text', '')
-                print("🔥 UI_UPDATE: Processing type_text")
+                log.debug(" UI_UPDATE: Processing type_text")
                 self._safe_type_text(text)
         except Exception as e:
-            print(f"Error handling UI update {request.action}: {e}")
+            log.error(f"Error handling UI update {request.action}: {e}")
     
     def init_ui(self):
         self.setWindowTitle(f"DICTATOR v{__version__}")
@@ -303,7 +303,7 @@ class DictatorWindow(QMainWindow):
         
         # Status
         engine_status = "Whisper (loading...)"
-        self.status_label = QLabel(f"✅ Ready - {engine_status} - Press Ctrl+Space to dictate")
+        self.status_label = QLabel(f"Ready - {engine_status} - Press Ctrl+Space to dictate")
         self.status_label.setStyleSheet("color: #4CAF50; font-size: 13px; margin: 8px 0;")
         top_layout.addWidget(self.status_label)
         
@@ -396,7 +396,7 @@ class DictatorWindow(QMainWindow):
         # Create volume timer but don't start it yet - only during recording
         self.volume_timer = QTimer()
         self.volume_timer.timeout.connect(self.update_volume_bars)
-        print("🔥 VOLUME: Volume timer created but not started (will start during recording)")
+        log.debug(" VOLUME: Volume timer created but not started (will start during recording)")
         
         
         # Current transcription text area
@@ -514,7 +514,7 @@ class DictatorWindow(QMainWindow):
         app_icon = QApplication.instance().windowIcon()
         if not app_icon.isNull():
             self.setWindowIcon(app_icon)
-            print("✅ Using application icon for window")
+            log.info(" Using application icon for window")
             return
         
         # If no app icon, create our own multi-size icon
@@ -528,21 +528,21 @@ class DictatorWindow(QMainWindow):
             icon_path = os.path.join(base_dir, 'icons', f'dictator-{size}.png')
             if os.path.exists(icon_path):
                 app_icon.addFile(icon_path, QSize(int(size), int(size)))
-                print(f"🎯 Added window icon size {size}x{size}: {icon_path}")
+                log.debug(f"Added window icon size {size}x{size}: {icon_path}")
                 icon_loaded = True
         
         # Add main icon as fallback
         main_icon = os.path.join(base_dir, 'icons', 'dictator.png')
         if os.path.exists(main_icon):
             app_icon.addFile(main_icon)
-            print(f"🎯 Added main window icon: {main_icon}")
+            log.debug(f"Added main window icon: {main_icon}")
             icon_loaded = True
         
         if icon_loaded:
             self.setWindowIcon(app_icon)
-            print("✅ Window icon set for GNOME compatibility")
+            log.info(" Window icon set for GNOME compatibility")
         else:
-            print("🚨 No window icons found")
+            log.error(" No window icons found")
     
     def update_window_alpha(self, opacity_percent):
         """Update window transparency using alpha channel (this actually works!)"""
@@ -565,7 +565,7 @@ class DictatorWindow(QMainWindow):
                 border: 2px solid {border_color};
             }}
         """)
-        print(f"🔥 OPACITY: Updated window alpha to {alpha} ({opacity_percent}%) with custom colors")
+        log.debug(f"OPACITY: Updated window alpha to {alpha} ({opacity_percent}%) with custom colors")
     
     def apply_custom_colors(self):
         """Apply custom colors to all UI components"""
@@ -796,7 +796,7 @@ class DictatorWindow(QMainWindow):
         if hasattr(self, 'top_left_grip'):
             self.top_left_grip.setStyleSheet(grip_style)
         
-        print(f"🎨 COLORS: Applied comprehensive theme - BG: {bg_color}, Border: {border_color}, Text: {text_color}, Button: {button_color}")
+        log.info(f"COLORS: Applied comprehensive theme - BG: {bg_color}, Border: {border_color}, Text: {text_color}, Button: {button_color}")
     
     def get_themed_history_item_style(self):
         """Generate themed stylesheet for history items"""
@@ -808,7 +808,7 @@ class DictatorWindow(QMainWindow):
         border_color = getattr(self, 'custom_border_color', '#4CAF50')
         button_color = getattr(self, 'custom_button_color', '#4CAF50')
         
-        print(f"🎨 HISTORY_STYLE: BG: {history_bg_color}, Text: {history_text_color}, Font: {history_font_family} {history_font_size}px, Border: {border_color}, Button: {button_color}")
+        log.debug(f"HISTORY_STYLE: BG: {history_bg_color}, Text: {history_text_color}, Font: {history_font_family} {history_font_size}px, Border: {border_color}, Button: {button_color}")
         
         hist_bg_rgba = QColor(history_bg_color)
         border_rgba = QColor(border_color)
@@ -848,30 +848,30 @@ class DictatorWindow(QMainWindow):
         """Open the settings dialog"""
         settings_dialog = SettingsDialog(self)
         if settings_dialog.exec() == QDialog.DialogCode.Accepted:
-            print("Settings applied successfully")
+            log.debug("Settings applied successfully")
             # Save config after settings are applied
             self.save_config()
     
     
     
     def toggle_recording(self):
-        print("🔥 HOTKEY: toggle_recording called from hotkey")
+        log.debug(" HOTKEY: toggle_recording called from hotkey")
         # Queue the recording toggle to run on main thread (thread-safe)
         self.request_ui_update("toggle_recording")
     
     def toggle_manual_recording(self):
-        print("🔥 BUTTON_CLICK: Manual recording button clicked")
+        log.debug(" BUTTON_CLICK: Manual recording button clicked")
         try:
             if self.recorder.is_recording:
-                print("🔥 BUTTON_CLICK: Currently recording - will stop")
+                log.debug(" BUTTON_CLICK: Currently recording - will stop")
                 self.stop_recording()
-                print("🔥 BUTTON_CLICK: Stop recording completed")
+                log.debug(" BUTTON_CLICK: Stop recording completed")
             else:
-                print("🔥 BUTTON_CLICK: Currently not recording - will start")
+                log.debug(" BUTTON_CLICK: Currently not recording - will start")
                 self.start_recording()
-                print("🔥 BUTTON_CLICK: Start recording completed")
+                log.debug(" BUTTON_CLICK: Start recording completed")
         except Exception as e:
-            print(f"🚨 FATAL ERROR in toggle_manual_recording: {e}")
+            log.error(f"FATAL ERROR in toggle_manual_recording: {e}")
             import traceback
             traceback.print_exc()
     
@@ -881,13 +881,13 @@ class DictatorWindow(QMainWindow):
         self.raise_()
         self.activateWindow()
         self.hide_timer.stop()
-        print("Starting recording...")
+        log.info("Starting recording...")
         
         # Start recording timer
         self.start_recording_timer()
         
         # Start volume monitoring during recording
-        print("🔥 VOLUME: Starting volume monitoring during recording...")
+        log.info(" VOLUME: Starting volume monitoring during recording...")
         self.volume_timer.start(20)  # Update every 20ms for more responsive feedback
         
         self.status_label.setText("👂 LISTENING...")
@@ -920,36 +920,36 @@ class DictatorWindow(QMainWindow):
         self.update_tray_recording_action(True)
     
     def stop_recording(self):
-        print("🔥 STOP_RECORDING: Starting stop recording process...")
+        log.info(" STOP_RECORDING: Starting stop recording process...")
         
         try:
-            print("🔥 STOP_RECORDING: Calling recorder.stop_recording()...")
+            log.debug(" STOP_RECORDING: Calling recorder.stop_recording()...")
             self.recorder.stop_recording()
-            print("🔥 STOP_RECORDING: recorder.stop_recording() completed")
+            log.debug(" STOP_RECORDING: recorder.stop_recording() completed")
             
-            print("🔥 STOP_RECORDING: Stopping recording timer...")
+            log.info(" STOP_RECORDING: Stopping recording timer...")
             self.stop_recording_timer()
-            print("🔥 STOP_RECORDING: Recording timer stopped")
+            log.debug(" STOP_RECORDING: Recording timer stopped")
             
             # Stop volume monitoring
-            print("🔥 VOLUME: Stopping volume monitoring...")
+            log.info(" VOLUME: Stopping volume monitoring...")
             self.volume_timer.stop()
-            print("🔥 VOLUME: Volume monitoring stopped")
+            log.debug(" VOLUME: Volume monitoring stopped")
             
-            print("🔥 STOP_RECORDING: Updating status label...")
-            self.status_label.setText("✅ Ready - Click to listen or press Ctrl+Space")
+            log.debug(" STOP_RECORDING: Updating status label...")
+            self.status_label.setText("Ready - Click to listen or press Ctrl+Space")
             self.status_label.setStyleSheet("color: #4CAF50; font-size: 13px;")
-            print("🔥 STOP_RECORDING: Status label updated")
+            log.debug(" STOP_RECORDING: Status label updated")
             
-            print("🔥 STOP_RECORDING: Processing Qt events after status update...")
+            log.debug(" STOP_RECORDING: Processing Qt events after status update...")
             QApplication.processEvents()
-            print("🔥 STOP_RECORDING: Qt events processed")
+            log.debug(" STOP_RECORDING: Qt events processed")
             
-            print("🔥 STOP_RECORDING: Resetting button text...")
+            log.debug(" STOP_RECORDING: Resetting button text...")
             self.record_btn.setText("🎤 Start Listening")
-            print("🔥 STOP_RECORDING: Button text set")
+            log.debug(" STOP_RECORDING: Button text set")
             
-            print("🔥 STOP_RECORDING: Setting button stylesheet...")
+            log.debug(" STOP_RECORDING: Setting button stylesheet...")
             self.record_btn.setStyleSheet("""
                 QPushButton {
                     background-color: rgba(76, 175, 80, 150);
@@ -968,51 +968,51 @@ class DictatorWindow(QMainWindow):
                     background-color: rgba(56, 155, 60, 200);
                 }
             """)
-            print("🔥 STOP_RECORDING: Button stylesheet set")
+            log.debug(" STOP_RECORDING: Button stylesheet set")
             
-            print("🔥 STOP_RECORDING: Processing final Qt events...")
+            log.debug(" STOP_RECORDING: Processing final Qt events...")
             QApplication.processEvents()
-            print("🔥 STOP_RECORDING: Final Qt events processed")
+            log.debug(" STOP_RECORDING: Final Qt events processed")
             
-            print("🔥 STOP_RECORDING: Stop recording process completed successfully")
+            log.debug(" STOP_RECORDING: Stop recording process completed successfully")
             
             # Update tray menu
             self.update_tray_recording_action(False)
             
         except Exception as e:
-            print(f"🚨 FATAL ERROR in stop_recording: {e}")
+            log.error(f"FATAL ERROR in stop_recording: {e}")
             import traceback
             traceback.print_exc()
     
     def on_transcription_ready(self, text, language):
         """Thread-safe callback - just queue the update like SAI"""
-        print(f"🔥 ON_TRANSCRIPTION_READY called with: '{text}', '{language}'")
-        print("🔥 Queuing transcription_complete request...")
+        log.debug(f"ON_TRANSCRIPTION_READY called with: '{text}', '{language}'")
+        log.debug(" Queuing transcription_complete request...")
         self.request_ui_update("transcription_complete", text=text, language=language)
-        print("🔥 Request queued successfully")
+        log.debug(" Request queued successfully")
     
     def _safe_handle_transcription(self, text, language):
         """Safe transcription handler that runs on main thread"""
-        print(f"🔥 SAFE_HANDLE_TRANSCRIPTION: '{text}' (language: {language})")
+        log.debug(f"SAFE_HANDLE_TRANSCRIPTION: '{text}' (language: {language})")
         
         # Stop recording
         self.stop_recording()
         
         if text and text.strip():
-            print(f"🔥 Queuing add_history_item for: '{text.strip()}'")
+            log.debug(f"Queuing add_history_item for: '{text.strip()}'")
             
             # Check if our window is active - if not, type the text as keystrokes
             if not self.isActiveWindow():
-                print("🔥 KEYBOARD: Window not active, typing text as keystrokes...")
+                log.debug(" KEYBOARD: Window not active, typing text as keystrokes...")
                 self.request_ui_update("type_text", text=text.strip())
             else:
-                print("🔥 CLIPBOARD: Window is active, using clipboard...")
+                log.debug(" CLIPBOARD: Window is active, using clipboard...")
                 # Queue clipboard copy to ensure it runs on main thread
                 self.request_ui_update("copy_to_clipboard", text=text.strip())
             
             self.request_ui_update("add_history_item", text=text.strip())
             self.request_ui_update("update_status", 
-                                 status="✅ Dictation complete", 
+                                 status="Dictation complete", 
                                  style="color: #4CAF50; font-size: 13px;")
         else:
             if language == "timeout":
@@ -1028,14 +1028,14 @@ class DictatorWindow(QMainWindow):
         # Temporarily disable auto-hide to reduce timer interactions
         # if self.auto_hide_checkbox.isChecked():
         #     self.hide_timer.start(3000)
-        print("🔥 Auto-hide disabled for debugging")
+        log.debug(" Auto-hide disabled for debugging")
     
     def _safe_add_history_item(self, text):
         """Safe history addition that runs on main thread"""
-        print(f"🔥 SAFE_ADD_HISTORY_ITEM: '{text}'")
+        log.debug(f"SAFE_ADD_HISTORY_ITEM: '{text}'")
         
         try:
-            print("🔥 Adding to history list...")
+            log.debug(" Adding to history list...")
             # Store history item with session metadata
             history_item = {
                 'text': text,
@@ -1044,112 +1044,112 @@ class DictatorWindow(QMainWindow):
             }
             self.history.append(history_item)
             
-            print(f"🔥 Adding to current session '{self.current_session}'...")
+            log.debug(f"Adding to current session '{self.current_session}'...")
             self.current_session_history.append(text)
             
-            print("🔥 Updating current text area...")
+            log.debug(" Updating current text area...")
             self.current_text_area.setPlainText(text)
-            print("🔥 Current text area updated successfully")
+            log.debug(" Current text area updated successfully")
             
             # Note: Clipboard copy already done in _safe_handle_transcription for immediate access
-            print("🔥 Clipboard copy already completed earlier")
+            log.debug(" Clipboard copy already completed earlier")
             
-            print("🔥 Creating QPushButton...")
+            log.debug(" Creating QPushButton...")
             # Create clickable history item with session name
             session_name = self.current_session if self.current_session else "Default"
             item_btn = QPushButton(f"📝 [{session_name}] {text}")
-            print("🔥 QPushButton created successfully")
+            log.debug(" QPushButton created successfully")
             
-            print("🔥 Setting themed stylesheet...")
+            log.debug(" Setting themed stylesheet...")
             item_btn.setStyleSheet(self.get_themed_history_item_style())
-            print("🔥 Stylesheet set successfully")
+            log.debug(" Stylesheet set successfully")
             
-            print("🔥 Connecting click handler...")
+            log.debug(" Connecting click handler...")
             item_btn.clicked.connect(lambda: self.show_history_item(text))
-            print("🔥 Click handler connected successfully")
+            log.debug(" Click handler connected successfully")
             
-            print("🔥 Inserting widget into layout...")
+            log.debug(" Inserting widget into layout...")
             self.history_layout.insertWidget(0, item_btn)
-            print("🔥 Widget inserted successfully")
+            log.debug(" Widget inserted successfully")
             
-            print("🔥 Processing Qt events after widget insertion...")
+            log.debug(" Processing Qt events after widget insertion...")
             QApplication.processEvents()  # Process events before continuing
-            print("🔥 Qt events processed")
+            log.debug(" Qt events processed")
             
-            print("🔥 Updating toggle button...")
+            log.debug(" Updating toggle button...")
             # Update toggle button
             self.history_toggle.setText(f"📜 History ({len(self.history)} items) {'▼' if not self.history_collapsed else '▶'}")
-            print("🔥 Toggle button updated successfully")
+            log.debug(" Toggle button updated successfully")
             
-            print("🔥 Cleaning up old items...")
+            log.debug(" Cleaning up old items...")
             # Cleanup old items
             if self.history_layout.count() > 20:
                 old_item = self.history_layout.itemAt(20).widget()
                 if old_item:
                     old_item.setParent(None)
-                    print("🔥 Old item removed")
+                    log.debug(" Old item removed")
             if len(self.history) > 20:
                 self.history = self.history[-20:]
-                print("🔥 History list trimmed")
+                log.debug(" History list trimmed")
             
-            print("🔥 Saving config...")
+            log.debug(" Saving config...")
             self.save_config()
-            print("🔥 Config saved successfully")
-            print("🔥 SAFE_ADD_HISTORY_ITEM completed successfully")
+            log.debug(" Config saved successfully")
+            log.debug(" SAFE_ADD_HISTORY_ITEM completed successfully")
             
         except Exception as e:
-            print(f"🚨 FATAL ERROR in _safe_add_history_item: {e}")
+            log.error(f"FATAL ERROR in _safe_add_history_item: {e}")
             import traceback
             traceback.print_exc()
             # Try to force quit if widget creation is failing
-            print("🚨 Widget creation failed - this might be a Qt issue")
+            log.error(" Widget creation failed - this might be a Qt issue")
             # Don't force quit immediately, let other systems handle it
     
     def _safe_update_status(self, status, style):
         """Safe status update that runs on main thread"""
-        print(f"🔥 SAFE_UPDATE_STATUS: '{status}'")
+        log.debug(f"SAFE_UPDATE_STATUS: '{status}'")
         self.status_label.setText(status)
         if style:
             self.status_label.setStyleSheet(style)
     
     def _safe_toggle_recording(self):
         """Safe recording toggle that runs on main thread"""
-        print("🔥 SAFE_TOGGLE: Called on main thread")
+        log.debug(" SAFE_TOGGLE: Called on main thread")
         try:
             if self.recorder.is_recording:
-                print("🔥 SAFE_TOGGLE: Currently recording - will stop")
+                log.debug(" SAFE_TOGGLE: Currently recording - will stop")
                 self.stop_recording()
             else:
-                print("🔥 SAFE_TOGGLE: Currently not recording - will start")
+                log.debug(" SAFE_TOGGLE: Currently not recording - will start")
                 self.start_recording()
         except Exception as e:
-            print(f"🚨 ERROR in _safe_toggle_recording: {e}")
+            log.error(f"ERROR in _safe_toggle_recording: {e}")
             import traceback
             traceback.print_exc()
     
     def _safe_copy_to_clipboard(self, text):
         """Safe clipboard copy that runs on main thread"""
-        print(f"🔥 SAFE_CLIPBOARD: Copying to clipboard on main thread: '{text[:50]}...'")
+        log.debug(f"SAFE_CLIPBOARD: Copying to clipboard on main thread: '{text[:50]}...'")
         try:
             clipboard = QApplication.clipboard()
             clipboard.setText(text)
-            print(f"🔥 SAFE_CLIPBOARD: Successfully copied to clipboard: '{text[:50]}...'")
+            log.debug(f"SAFE_CLIPBOARD: Successfully copied to clipboard: '{text[:50]}...'")
             
             # Test if clipboard actually contains our text
             clipboard_text = clipboard.text()
             if clipboard_text == text:
-                print("🔥 SAFE_CLIPBOARD: ✅ Verified clipboard contains correct text")
+                log.info(" SAFE_CLIPBOARD:  Verified clipboard contains correct text")
             else:
-                print(f"🚨 SAFE_CLIPBOARD: ❌ Clipboard verification failed! Expected: '{text[:30]}...', Got: '{clipboard_text[:30]}...'")
+                log.error(f"SAFE_CLIPBOARD: ❌ Clipboard verification failed! Expected: '{text[:30]}...', Got: '{clipboard_text[:30]}...'")
                 
         except Exception as e:
-            print(f"🚨 ERROR in _safe_copy_to_clipboard: {e}")
+            log.error(f"ERROR in _safe_copy_to_clipboard: {e}")
             import traceback
             traceback.print_exc()
 
     def _safe_type_text(self, text):
         """Safe text typing that runs on main thread"""
-        print(f"🔥 SAFE_TYPE: Typing text as keystrokes: '{text[:50]}...'")
+        log.debug(f"SAFE_TYPE: Typing text as keystrokes: '{text[:50]}...'")
         try:
             # Use pynput to type the text
             from pynput.keyboard import Controller
@@ -1160,14 +1160,14 @@ class DictatorWindow(QMainWindow):
             
             # Type the text
             keyboard.type(text)
-            print(f"🔥 SAFE_TYPE: Successfully typed text: '{text[:50]}...'")
+            log.debug(f"SAFE_TYPE: Successfully typed text: '{text[:50]}...'")
             
         except Exception as e:
-            print(f"🚨 ERROR in _safe_type_text: {e}")
+            log.error(f"ERROR in _safe_type_text: {e}")
             import traceback
             traceback.print_exc()
             # Fallback to clipboard if typing fails
-            print("🔥 SAFE_TYPE: Falling back to clipboard...")
+            log.debug(" SAFE_TYPE: Falling back to clipboard...")
             self._safe_copy_to_clipboard(text)
     
     # Old method removed - now using queue-based _safe_add_history_item
@@ -1179,7 +1179,7 @@ class DictatorWindow(QMainWindow):
         # Copy to clipboard
         clipboard = QApplication.clipboard()
         clipboard.setText(text)
-        print(f"🔥 CLIPBOARD: Copied to clipboard: '{text[:50]}...'")
+        log.debug(f"CLIPBOARD: Copied to clipboard: '{text[:50]}...'")
     
     def copy_current_text(self, event):
         """Copy current transcription text to clipboard when clicked"""
@@ -1187,7 +1187,7 @@ class DictatorWindow(QMainWindow):
         if text.strip():
             clipboard = QApplication.clipboard()
             clipboard.setText(text)
-            print(f"🔥 CLIPBOARD: Copied current text to clipboard: '{text[:50]}...'")
+            log.debug(f"CLIPBOARD: Copied current text to clipboard: '{text[:50]}...'")
             
             # Visual feedback - briefly change border color to button color
             original_style = self.current_text_area.styleSheet()
@@ -1220,19 +1220,19 @@ class DictatorWindow(QMainWindow):
     
     def stop_recording_timer(self):
         """Stop the recording timer"""
-        print("🔥 TIMER: Stopping recording timer...")
+        log.info(" TIMER: Stopping recording timer...")
         try:
             self.recording_timer.stop()
-            print("🔥 TIMER: QTimer stopped")
+            log.debug(" TIMER: QTimer stopped")
             
             self.timer_label.hide()
-            print("🔥 TIMER: Timer label hidden")
+            log.debug(" TIMER: Timer label hidden")
             
             self.recording_start_time = None
-            print("🔥 TIMER: Start time reset")
-            print("🔥 TIMER: Recording timer stopped successfully")
+            log.debug(" TIMER: Start time reset")
+            log.debug(" TIMER: Recording timer stopped successfully")
         except Exception as e:
-            print(f"🚨 ERROR in stop_recording_timer: {e}")
+            log.error(f"ERROR in stop_recording_timer: {e}")
             import traceback
             traceback.print_exc()
     
@@ -1309,7 +1309,7 @@ class DictatorWindow(QMainWindow):
     def toggle_always_on_top(self, checked):
         """Toggle always on top window state"""
         self.always_on_top = checked
-        print(f"🔄 Setting always on top: {checked}")
+        log.debug(f"Setting always on top: {checked}")
         
         # Get current position and visibility state before changing flags
         current_pos = self.pos()
@@ -1325,7 +1325,7 @@ class DictatorWindow(QMainWindow):
         else:
             new_flags = base_flags
             
-        print(f"🔄 Setting window flags: {new_flags}")
+        log.debug(f"Setting window flags: {new_flags}")
         
         # Hide window before changing flags to prevent flicker
         if was_visible:
@@ -1348,11 +1348,11 @@ class DictatorWindow(QMainWindow):
                     # Force the window to be on top immediately
                     self.setWindowState(self.windowState() | Qt.WindowState.WindowActive)
                     self.raise_()
-                    print("🔄 Applied additional GNOME always-on-top hints")
+                    log.info(" Applied additional GNOME always-on-top hints")
                 except Exception as e:
-                    print(f"⚠️ Could not apply additional always-on-top hints: {e}")
+                    log.warning(f"Could not apply additional always-on-top hints: {e}")
         
-        print(f"✅ Always on top {'enabled' if checked else 'disabled'}")
+        log.info(f"Always on top {'enabled' if checked else 'disabled'}")
         
         # Save the setting immediately
         self.save_config()
@@ -1363,7 +1363,7 @@ class DictatorWindow(QMainWindow):
     def close_application(self):
         # Prevent recursion during shutdown
         if self.is_closing:
-            print("Already closing, ignoring duplicate close request...")
+            log.debug("Already closing, ignoring duplicate close request...")
             return
 
         self.is_closing = True
@@ -1617,7 +1617,7 @@ class DictatorWindow(QMainWindow):
             # Use Qt's native window dragging through compositor
             window_handle = self.windowHandle()
             if window_handle:
-                print("Starting compositor drag")
+                log.info("Starting compositor drag")
                 window_handle.startSystemMove()
             event.accept()
         self.hide_timer.stop()
@@ -1636,23 +1636,23 @@ class DictatorWindow(QMainWindow):
     def save_window_position(self):
         """Save current window position"""
         pos = self.pos()
-        print(f"Saving window position: ({pos.x()}, {pos.y()})")
+        log.debug(f"Saving window position: ({pos.x()}, {pos.y()})")
         # Could save to config if needed
 
     def load_package_icon(self, icon_name):
         """Load an icon from package resources"""
         try:
             # Try to load from package icons
-            print(f"🔍 Trying to load package icon: {icon_name}")
+            log.debug(f"🔍 Trying to load package icon: {icon_name}")
             with pkg_resources.path("src.icons", icon_name) as icon_path:
-                print(f"🔍 Package icon path: {icon_path}")
+                log.debug(f"🔍 Package icon path: {icon_path}")
                 if icon_path.exists():
-                    print(f"✅ Package icon exists: {icon_path}")
+                    log.info(f"Package icon exists: {icon_path}")
                     return str(icon_path)
                 else:
-                    print(f"❌ Package icon does not exist: {icon_path}")
+                    log.debug(f"❌ Package icon does not exist: {icon_path}")
         except Exception as e:
-            print(f"⚠️ Could not load package icon {icon_name}: {e}")
+            log.warning(f"Could not load package icon {icon_name}: {e}")
             import traceback
             traceback.print_exc()
         return None
@@ -1665,22 +1665,22 @@ class DictatorWindow(QMainWindow):
         icon_paths = []
         
         # Try package resources first
-        print("🔍 Checking package icons...")
+        log.debug("🔍 Checking package icons...")
         for size in preferred_sizes:
             icon_name = f"dictator-{size}.png"
             package_path = self.load_package_icon(icon_name)
             if package_path:
                 icon_paths.append(package_path)
-                print(f"✅ Found package icon: {icon_name}")
+                log.info(f"Found package icon: {icon_name}")
         
         # Also try the main dictator.png
         main_package_path = self.load_package_icon("dictator.png")
         if main_package_path:
             icon_paths.append(main_package_path)
-            print(f"✅ Found main package icon: dictator.png")
+            log.info(f"Found main package icon: dictator.png")
         
         # Fallback to development/source paths
-        print("🔍 Checking development paths...")
+        log.debug("🔍 Checking development paths...")
         current_file = Path(__file__).resolve()
         project_root = current_file.parent.parent
         desktop_dir = project_root / "desktop"
@@ -1689,15 +1689,15 @@ class DictatorWindow(QMainWindow):
             fallback_path = str(desktop_dir / f"dictator-{size}.png")
             if os.path.exists(fallback_path):
                 icon_paths.append(fallback_path)
-                print(f"✅ Found development icon: dictator-{size}.png")
+                log.info(f"Found development icon: dictator-{size}.png")
         
         fallback_main = str(desktop_dir / "dictator.png")
         if os.path.exists(fallback_main):
             icon_paths.append(fallback_main)
-            print(f"✅ Found main development icon: dictator.png")
+            log.info(f"Found main development icon: dictator.png")
         
         # System installation paths
-        print("🔍 Checking system paths...")
+        log.debug("🔍 Checking system paths...")
         system_paths = [
             "/usr/share/pixmaps/dictator.png",
             "/usr/share/icons/hicolor/64x64/apps/dictator.png", 
@@ -1707,7 +1707,7 @@ class DictatorWindow(QMainWindow):
         for sys_path in system_paths:
             if os.path.exists(sys_path):
                 icon_paths.append(sys_path)
-                print(f"✅ Found system icon: {sys_path}")
+                log.info(f"Found system icon: {sys_path}")
         
         return icon_paths
 
@@ -1734,30 +1734,30 @@ class DictatorWindow(QMainWindow):
         """Set the window icon from available icon files"""
         icon_paths = self.get_icon_paths(["64", "48", "32"])
         
-        print(f"🔍 Trying to set window icon from {len(icon_paths)} paths")
+        log.debug(f"🔍 Trying to set window icon from {len(icon_paths)} paths")
         icon_loaded = False
         for i, icon_path in enumerate(icon_paths):
-            print(f"🔍 [{i+1}/{len(icon_paths)}] Checking icon path: {icon_path}")
+            log.debug(f"🔍 [{i+1}/{len(icon_paths)}] Checking icon path: {icon_path}")
             if os.path.exists(icon_path):
-                print(f"✅ Icon file exists: {icon_path}")
+                log.info(f"Icon file exists: {icon_path}")
                 icon = QIcon(icon_path)
                 if not icon.isNull():
                     self.setWindowIcon(icon)
                     icon_loaded = True
-                    print(f"🎯 Successfully loaded window icon from: {icon_path}")
+                    log.debug(f"Successfully loaded window icon from: {icon_path}")
                     break
                 else:
-                    print(f"❌ QIcon is null for: {icon_path}")
+                    log.debug(f"❌ QIcon is null for: {icon_path}")
             else:
-                print(f"❌ Icon file does not exist: {icon_path}")
+                log.debug(f"❌ Icon file does not exist: {icon_path}")
                     
         if not icon_loaded:
-            print("🚨 No window icon found, using default")
+            log.error(" No window icon found, using default")
 
     def setup_system_tray(self):
         """Setup system tray icon and menu"""
         if not QSystemTrayIcon.isSystemTrayAvailable():
-            print("⚠️ System tray not available")
+            log.warning(" System tray not available")
             return
             
         # Create tray icon
@@ -1773,7 +1773,7 @@ class DictatorWindow(QMainWindow):
             icon_path = os.path.join(base_dir, 'icons', f'dictator-{size}.png')
             if os.path.exists(icon_path):
                 tray_icon.addFile(icon_path, QSize(int(size), int(size)))
-                print(f"🎯 Added tray icon size {size}x{size}: {icon_path}")
+                log.debug(f"Added tray icon size {size}x{size}: {icon_path}")
                 icon_loaded = True
         
         # Add fallback sizes if specific tray sizes not found
@@ -1781,14 +1781,14 @@ class DictatorWindow(QMainWindow):
             icon_path = os.path.join(base_dir, 'icons', f'dictator-{size}.png')
             if os.path.exists(icon_path):
                 tray_icon.addFile(icon_path, QSize(int(size), int(size)))
-                print(f"🎯 Added fallback tray icon {size}x{size}: {icon_path}")
+                log.debug(f"Added fallback tray icon {size}x{size}: {icon_path}")
                 icon_loaded = True
         
         if icon_loaded:
             self.tray_icon.setIcon(tray_icon)
-            print("✅ Multi-size tray icon set for GNOME compatibility")
+            log.info(" Multi-size tray icon set for GNOME compatibility")
         else:
-            print("⚠️ No tray icon found, using default")
+            log.warning(" No tray icon found, using default")
         
         # Create tray menu
         tray_menu = QMenu()
@@ -1826,7 +1826,7 @@ class DictatorWindow(QMainWindow):
         # Set tooltip
         self.tray_icon.setToolTip(f"DICTATOR v{__version__} - Speech to Text")
         
-        print("✅ System tray icon created")
+        log.info(" System tray icon created")
     
     def tray_icon_activated(self, reason):
         """Handle tray icon activation"""

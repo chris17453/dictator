@@ -15,8 +15,8 @@ def list_audio_devices():
         import sounddevice as sd
         devices = sd.query_devices()
         
-        print("📱 Available Audio Input Devices:")
-        print("=" * 50)
+        log.debug(" Available Audio Input Devices:")
+        log.debug("=" * 50)
         
         input_devices = []
         for i, device in enumerate(devices):
@@ -29,21 +29,21 @@ def list_audio_devices():
                     'sample_rate': device['default_samplerate'],
                     'is_default': i == sd.default.device[0]
                 })
-                print(f"  [{i:2d}] {device['name']}{default_marker}")
+                log.debug(f"[{i:2d}] {device['name']}{default_marker}")
                 print(f"       Channels: {device['max_input_channels']}, "
                       f"Sample Rate: {device['default_samplerate']:.0f} Hz")
-                print()
+                log.debug()
         
         if not input_devices:
-            print("⚠️  No input devices found!")
+            log.warning("  No input devices found!")
         
         return input_devices
         
     except ImportError:
-        print("❌ sounddevice not installed. Install with: pip install sounddevice")
+        log.debug("❌ sounddevice not installed. Install with: pip install sounddevice")
         return []
     except Exception as e:
-        print(f"❌ Error listing devices: {e}")
+        log.error(f"❌ Error listing devices: {e}")
         return []
 
 
@@ -52,8 +52,8 @@ def show_device_info():
     try:
         import sounddevice as sd
         
-        print("🔧 Current Audio Configuration:")
-        print("=" * 40)
+        log.debug("🔧 Current Audio Configuration:")
+        log.debug("=" * 40)
         
         # Get default devices
         default_input = sd.default.device[0]
@@ -62,13 +62,13 @@ def show_device_info():
         
         if default_input is not None and default_input < len(devices):
             input_dev = devices[default_input]
-            print(f"Input Device:  [{default_input}] {input_dev['name']}")
-            print(f"Channels:      {input_dev['max_input_channels']}")
-            print(f"Sample Rate:   {input_dev['default_samplerate']:.0f} Hz")
+            log.debug(f"Input Device:  [{default_input}] {input_dev['name']}")
+            log.debug(f"Channels:      {input_dev['max_input_channels']}")
+            log.debug(f"Sample Rate:   {input_dev['default_samplerate']:.0f} Hz")
         else:
-            print("Input Device:  None selected")
+            log.debug("Input Device:  None selected")
         
-        print()
+        log.debug()
         
         # Check for config file
         config_path = Path.home() / ".config" / "dictator" / "config.json"
@@ -77,22 +77,22 @@ def show_device_info():
                 with open(config_path, 'r') as f:
                     config = json.load(f)
                     
-                print("📁 DICTATOR Configuration:")
+                log.debug("📁 DICTATOR Configuration:")
                 if 'audio_device_index' in config:
-                    print(f"Configured Device: {config['audio_device_index']}")
+                    log.debug(f"Configured Device: {config['audio_device_index']}")
                 if 'whisper_model' in config:
-                    print(f"Whisper Model: {config['whisper_model']}")
+                    log.debug(f"Whisper Model: {config['whisper_model']}")
                 if 'hotkey' in config:
-                    print(f"Hotkey: {config['hotkey']}")
+                    log.debug(f"Hotkey: {config['hotkey']}")
             except Exception as e:
-                print(f"⚠️  Error reading config: {e}")
+                log.error(f"Error reading config: {e}")
         else:
-            print("📁 No DICTATOR config file found")
+            log.debug("📁 No DICTATOR config file found")
             
     except ImportError:
-        print("❌ sounddevice not installed")
+        log.debug("❌ sounddevice not installed")
     except Exception as e:
-        print(f"❌ Error getting device info: {e}")
+        log.error(f"❌ Error getting device info: {e}")
 
 
 def show_version_info():
@@ -103,22 +103,22 @@ def show_version_info():
         # Handle relative import when running as module
         from .version import __version__, __author__, __email__, __description__
     
-    print(f"🎤 DICTATOR v{__version__}")
-    print("=" * 30)
-    print(f"Description: {__description__}")
-    print(f"Author:      {__author__}")
-    print(f"Email:       {__email__}")
-    print(f"Repository:  https://github.com/chris17453/dictator")
-    print()
+    log.debug(f"DICTATOR v{__version__}")
+    log.debug("=" * 30)
+    log.debug(f"Description: {__description__}")
+    log.debug(f"Author:      {__author__}")
+    log.debug(f"Email:       {__email__}")
+    log.debug(f"Repository:  https://github.com/chris17453/dictator")
+    log.debug()
     
     # System info
-    print("💻 System Information:")
-    print(f"Python:      {sys.version.split()[0]} (requires >=3.8)")
-    print(f"Platform:    {sys.platform}")
+    log.debug("💻 System Information:")
+    log.debug(f"Python:      {sys.version.split()[0]} (requires >=3.8)")
+    log.debug(f"Platform:    {sys.platform}")
     
     # Check dependencies
-    print()
-    print("📦 Dependencies:")
+    log.debug()
+    log.debug("📦 Dependencies:")
     deps_to_check = [
         ('PyQt6', 'PyQt6'),
         ('sounddevice', 'sounddevice'),  
@@ -131,9 +131,9 @@ def show_version_info():
     for display_name, import_name in deps_to_check:
         try:
             __import__(import_name)
-            print(f"  ✅ {display_name}")
+            log.info(f"{display_name}")
         except ImportError:
-            print(f"  ❌ {display_name} (not installed)")
+            log.debug(f"❌ {display_name} (not installed)")
 
 
 def set_audio_device(device_id):
@@ -143,13 +143,13 @@ def set_audio_device(device_id):
         devices = sd.query_devices()
         
         if device_id < 0 or device_id >= len(devices):
-            print(f"❌ Invalid device ID: {device_id}")
-            print("Use --list-devices to see available devices")
+            log.debug(f"❌ Invalid device ID: {device_id}")
+            log.debug("Use --list-devices to see available devices")
             return False
             
         device = devices[device_id]
         if device['max_input_channels'] == 0:
-            print(f"❌ Device {device_id} '{device['name']}' has no input channels")
+            log.debug(f"❌ Device {device_id} '{device['name']}' has no input channels")
             return False
         
         # Create config directory if it doesn't exist
@@ -164,7 +164,7 @@ def set_audio_device(device_id):
                 with open(config_path, 'r') as f:
                     config = json.load(f)
             except Exception as e:
-                print(f"⚠️  Warning: Could not read existing config: {e}")
+                log.warning(f"Warning: Could not read existing config: {e}")
         
         # Update device setting
         config['audio_device_index'] = device_id
@@ -173,15 +173,15 @@ def set_audio_device(device_id):
         with open(config_path, 'w') as f:
             json.dump(config, f, indent=2)
         
-        print(f"✅ Audio device set to: [{device_id}] {device['name']}")
-        print(f"📁 Configuration saved to: {config_path}")
+        log.info(f"Audio device set to: [{device_id}] {device['name']}")
+        log.debug(f"📁 Configuration saved to: {config_path}")
         return True
         
     except ImportError:
-        print("❌ sounddevice not installed")
+        log.debug("❌ sounddevice not installed")
         return False
     except Exception as e:
-        print(f"❌ Error setting device: {e}")
+        log.error(f"❌ Error setting device: {e}")
         return False
 
 
@@ -274,4 +274,4 @@ if __name__ == "__main__":
     # For testing CLI functions directly
     result = handle_cli()
     if result and result.get('start_gui'):
-        print("CLI would start GUI here...")
+        log.debug("CLI would start GUI here...")

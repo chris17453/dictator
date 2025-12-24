@@ -63,13 +63,13 @@ class PureRecorder:
         
         self.refresh_microphones()
         
-        print(f"WHISPER_AVAILABLE at init: {WHISPER_AVAILABLE}")
+        log.debug(f"WHISPER_AVAILABLE at init: {WHISPER_AVAILABLE}")
         if WHISPER_AVAILABLE:
-            print("Calling load_whisper_model...")
+            log.debug("Calling load_whisper_model...")
             self.load_whisper_model()
-            print(f"After loading, self.whisper_model = {self.whisper_model}")
+            log.debug(f"After loading, self.whisper_model = {self.whisper_model}")
         else:
-            print("WHISPER_AVAILABLE is False!")
+            log.debug("WHISPER_AVAILABLE is False!")
             self.whisper_model = None
         
         # Initialize audio variables (keep it simple)
@@ -94,11 +94,11 @@ class PureRecorder:
 
             device = "cpu"
             model_path = self.get_whisper_model_path()
-            print(f"Using model directory: {model_path}")
+            log.debug(f"Using model directory: {model_path}")
             
             # Try tiny model first - it's fastest to load
             try:
-                print("Loading tiny Whisper model...")
+                log.debug("Loading tiny Whisper model...")
                 from faster_whisper import WhisperModel
                 self.whisper_model = WhisperModel(
                     "tiny", 
@@ -106,20 +106,20 @@ class PureRecorder:
                     download_root=model_path
                 )
                 self.whisper_model_name = "tiny"
-                print("✅ Whisper tiny model loaded successfully")
-                print(f"Model stored in: {model_path}")
+                log.info(" Whisper tiny model loaded successfully")
+                log.debug(f"Model stored in: {model_path}")
                 return
             except Exception as e:
-                print(f"Failed to load tiny model: {e}")
+                log.error(f"Failed to load tiny model: {e}")
             
             # Skip openai-whisper due to version conflicts
             
             # If all fails, error out
-            print("❌ FATAL: Could not load any Whisper model")
+            log.error("❌ FATAL: Could not load any Whisper model")
             self.whisper_model = None
             
         except Exception as e:
-            print(f"Whisper loading error: {e}")
+            log.error(f"Whisper loading error: {e}")
             self.whisper_model = None
     
     def refresh_microphones(self):
@@ -160,13 +160,13 @@ class PureRecorder:
                 except Exception:
                     continue
             
-            print(f"Found microphones using SoundDevice: {[mic['name'] for mic in self.available_microphones]}")
+            log.debug(f"Found microphones using SoundDevice: {[mic['name'] for mic in self.available_microphones]}")
             
             if self.available_microphones and self.current_microphone_index is None:
                 self.set_microphone(0)
                 
         except Exception as e:
-            print(f"Failed to enumerate microphones: {e}")
+            log.error(f"Failed to enumerate microphones: {e}")
     
     def get_microphone_list(self):
         return self.available_microphones
@@ -178,13 +178,13 @@ class PureRecorder:
             for i, mic in enumerate(self.available_microphones):
                 if mic['index'] == device_index:
                     self.current_microphone_index = device_index  # Store actual device index
-                    print(f"🔥 RECORDER: Selected microphone: {mic['name']} (device index: {device_index})")
+                    log.debug(f"RECORDER: Selected microphone: {mic['name']} (device index: {device_index})")
                     return True
             
-            print(f"🚨 RECORDER: Device index {device_index} not found in available microphones")
+            log.error(f"RECORDER: Device index {device_index} not found in available microphones")
             return False
         except Exception as e:
-            print(f"🚨 RECORDER: Failed to set microphone {device_index}: {e}")
+            log.error(f"RECORDER: Failed to set microphone {device_index}: {e}")
         return False
     
     def get_current_microphone(self):
@@ -202,34 +202,34 @@ class PureRecorder:
         
         self.is_recording = True
         self.callback = callback
-        print(f"🔥 CALLBACK SET TO: {callback}")
+        log.debug(f"CALLBACK SET TO: {callback}")
         
-        print(f"Starting recording with microphone index: {self.current_microphone_index}")
+        log.info(f"Starting recording with microphone index: {self.current_microphone_index}")
         thread = threading.Thread(target=self._record_worker)
         thread.daemon = True
         thread.start()
     
     def stop_recording(self):
-        print("🔥 RECORDER: stop_recording called")
+        log.debug(" RECORDER: stop_recording called")
         self.is_recording = False
-        print("🔥 RECORDER: is_recording set to False")
+        log.debug(" RECORDER: is_recording set to False")
         
         # Clean up any active subprocess
         if self.active_subprocess and self.active_subprocess.poll() is None:
-            print("🔥 RECORDER: Terminating active subprocess...")
+            log.debug(" RECORDER: Terminating active subprocess...")
             try:
                 self.active_subprocess.terminate()
                 # Give it a moment to terminate gracefully
                 try:
                     self.active_subprocess.wait(timeout=2)
-                    print("🔥 RECORDER: Subprocess terminated gracefully")
+                    log.debug(" RECORDER: Subprocess terminated gracefully")
                 except subprocess.TimeoutExpired:
-                    print("🔥 RECORDER: Subprocess didn't terminate, killing...")
+                    log.debug(" RECORDER: Subprocess didn't terminate, killing...")
                     self.active_subprocess.kill()
                     self.active_subprocess.wait()
-                    print("🔥 RECORDER: Subprocess killed")
+                    log.debug(" RECORDER: Subprocess killed")
             except Exception as e:
-                print(f"🚨 RECORDER: Error cleaning up subprocess: {e}")
+                log.error(f"RECORDER: Error cleaning up subprocess: {e}")
             finally:
                 self.active_subprocess = None
     
@@ -256,7 +256,7 @@ class PureRecorder:
             pass
             
         except Exception as e:
-            print(f"Continuous monitoring error: {e}")
+            log.error(f"Continuous monitoring error: {e}")
     
     def stop_monitoring(self):
         """Stop continuous monitoring"""
@@ -269,8 +269,8 @@ class PureRecorder:
     
     def _record_worker(self):
         # FORCE WHISPER LOADING AND ONLY USE WHISPER
-        print(f"WHISPER_AVAILABLE: {WHISPER_AVAILABLE}")
-        print(f"self.whisper_model: {self.whisper_model}")
+        log.debug(f"WHISPER_AVAILABLE: {WHISPER_AVAILABLE}")
+        log.debug(f"self.whisper_model: {self.whisper_model}")
         
         # If Whisper is available but model not loaded, load it now
         if not self.whisper_model:
@@ -283,34 +283,34 @@ class PureRecorder:
                     device="cpu",
                     download_root=model_path
                 )
-                print("✅ Whisper tiny model loaded successfully")
-                print(f"Model stored in: {model_path}")
+                log.info(" Whisper tiny model loaded successfully")
+                log.debug(f"Model stored in: {model_path}")
             except Exception as e:
-                print(f"FATAL: Failed to load Whisper model: {e}")
+                log.error(f"FATAL: Failed to load Whisper model: {e}")
                 self.callback("ERROR: Whisper failed to load", "error")
                 return
         
         # ONLY USE WHISPER - NO GOOGLE
-        print("🎵 Using Whisper for transcription")
+        log.debug("🎵 Using Whisper for transcription")
         self._record_with_whisper()
     
     def _record_with_whisper(self):
-        print("🎵 Recording with Whisper...")
+        log.debug("🎵 Recording with Whisper...")
         try:
-            print("🔥 WHISPER_RECORD: Using isolated subprocess to prevent memory corruption")
+            log.debug(" WHISPER_RECORD: Using isolated subprocess to prevent memory corruption")
             
             # Use selected microphone device
             current_mic = self.get_current_microphone()
             if current_mic:
                 device_index = current_mic['index']
                 device_name = current_mic['name']
-                print(f"🔥 WHISPER_RECORD: Using selected microphone: {device_name} (index: {device_index})")
+                log.debug(f"WHISPER_RECORD: Using selected microphone: {device_name} (index: {device_index})")
             else:
                 device_index = None
-                print("🔥 WHISPER_RECORD: Using default audio input (no microphone selected)")
+                log.debug(" WHISPER_RECORD: Using default audio input (no microphone selected)")
             
             # Get device sample rate directly like SAI does - simple and works
-            print(f"🔥 WHISPER_RECORD: Getting device sample rate...")
+            log.debug(f"WHISPER_RECORD: Getting device sample rate...")
             
             try:
                 import sounddevice as sd
@@ -318,24 +318,24 @@ class PureRecorder:
                 
                 if device_index is None or device_index >= len(devices):
                     device_index = sd.default.device[0] if hasattr(sd.default.device, '__iter__') else None
-                    print(f"🔥 WHISPER_RECORD: Using default device: {device_index}")
+                    log.debug(f"WHISPER_RECORD: Using default device: {device_index}")
                 
                 if device_index is not None and device_index < len(devices):
                     device_info = devices[device_index]
                     working_rate = int(device_info.get('default_samplerate', 44100))
-                    print(f"🔥 WHISPER_RECORD: Using device default rate: {working_rate}Hz")
+                    log.debug(f"WHISPER_RECORD: Using device default rate: {working_rate}Hz")
                 else:
                     working_rate = 44100
-                    print("🔥 WHISPER_RECORD: Using fallback rate: 44100Hz")
+                    log.debug(" WHISPER_RECORD: Using fallback rate: 44100Hz")
                     
             except Exception as e:
-                print(f"🚨 WHISPER_RECORD: Error getting device rate: {e}, using 44100Hz")
+                log.error(f"WHISPER_RECORD: Error getting device rate: {e}, using 44100Hz")
                 working_rate = 44100
             
             temp_audio_path = None
             
             # Now just use the working rate we determined
-            print(f"🔥 WHISPER_RECORD: Starting subprocess recording at {working_rate}Hz...")
+            log.info(f"WHISPER_RECORD: Starting subprocess recording at {working_rate}Hz...")
             
             try:
                 # Launch isolated SoundDevice audio recording subprocess  
@@ -358,10 +358,10 @@ class PureRecorder:
                 
                 # If process is still running, it worked
                 if process.poll() is None:
-                    print(f"🔥 WHISPER_RECORD: Subprocess recording working at {working_rate}Hz")
+                    log.debug(f"WHISPER_RECORD: Subprocess recording working at {working_rate}Hz")
                     
                     # Continue recording until stopped
-                    print("🔥 WHISPER_RECORD: Recording audio...")
+                    log.debug(" WHISPER_RECORD: Recording audio...")
                     
                     # Monitor real audio levels from subprocess
                     start_time = time.time()
@@ -399,16 +399,16 @@ class PureRecorder:
                                     self.current_audio_level = random.randint(10, 50)
                         except Exception as e:
                             # If level reading fails, use a default
-                            print(f"Level reading error: {e}")
+                            log.error(f"Level reading error: {e}")
                             with self.audio_level_lock:
                                 self.current_audio_level = 25
                         
                         if elapsed > 300:  # 5 minute safety limit
-                            print("🔥 WHISPER_RECORD: Maximum recording time reached")
+                            log.debug(" WHISPER_RECORD: Maximum recording time reached")
                             break
                     
                     # Stop the subprocess
-                    print("🔥 WHISPER_RECORD: Stopping subprocess...")
+                    log.info(" WHISPER_RECORD: Stopping subprocess...")
                     process.terminate()
                     
                     # Wait for output
@@ -416,11 +416,11 @@ class PureRecorder:
                         stdout, stderr = process.communicate(timeout=10)
                         if process.returncode == 0 and stdout.strip():
                             temp_audio_path = stdout.decode().strip()
-                            print(f"🔥 WHISPER_RECORD: Audio saved to {temp_audio_path}")
+                            log.debug(f"WHISPER_RECORD: Audio saved to {temp_audio_path}")
                         else:
-                            print(f"🚨 WHISPER_RECORD: Subprocess failed: {stderr.decode()}")
+                            log.error(f"WHISPER_RECORD: Subprocess failed: {stderr.decode()}")
                     except subprocess.TimeoutExpired:
-                        print("🚨 WHISPER_RECORD: Subprocess timeout, killing...")
+                        log.error(" WHISPER_RECORD: Subprocess timeout, killing...")
                         process.kill()
                         process.communicate()
                     finally:
@@ -429,13 +429,13 @@ class PureRecorder:
                     
                 else:
                     stdout, stderr = process.communicate()
-                    print(f"🚨 WHISPER_RECORD: Failed at {working_rate}Hz: {stderr.decode()}")
+                    log.error(f"WHISPER_RECORD: Failed at {working_rate}Hz: {stderr.decode()}")
                     temp_audio_path = None
                     # Clear subprocess reference
                     self.active_subprocess = None
                     
             except Exception as e:
-                print(f"🚨 WHISPER_RECORD: Error testing {working_rate}Hz: {e}")
+                log.error(f"WHISPER_RECORD: Error testing {working_rate}Hz: {e}")
                 temp_audio_path = None
                 # Clear subprocess reference on error
                 self.active_subprocess = None
@@ -444,7 +444,7 @@ class PureRecorder:
                 raise Exception(f"Could not record audio at {working_rate}Hz")
             
             # Load the recorded audio file
-            print("🔥 WHISPER_RECORD: Loading recorded audio...")
+            log.debug(" WHISPER_RECORD: Loading recorded audio...")
             try:
                 with open(temp_audio_path, 'rb') as f:
                     raw_data = f.read()
@@ -453,75 +453,75 @@ class PureRecorder:
                 os.unlink(temp_audio_path)
                 
                 if not raw_data:
-                    print("No audio data in file")
+                    log.debug("No audio data in file")
                     self.callback("", "no_audio")
                     return
                 
                 # Convert raw bytes to numpy array
                 audio_array = np.frombuffer(raw_data, dtype=np.int16)
-                print(f"🔥 WHISPER_RECORD: Loaded {len(audio_array)} audio samples")
+                log.info(f"WHISPER_RECORD: Loaded {len(audio_array)} audio samples")
                 
             except Exception as e:
-                print(f"🚨 WHISPER_RECORD: Error loading audio file: {e}")
+                log.error(f"WHISPER_RECORD: Error loading audio file: {e}")
                 self.callback("", "file_error")
                 return
             
             # Process with Whisper
-            print("Processing audio with Whisper...")
+            log.debug("Processing audio with Whisper...")
             audio_float = audio_array.astype(np.float32) / 32768.0
             
             # Resample to 16kHz if needed (Whisper's expected rate)
             if working_rate != 16000:
-                print(f"🔥 WHISPER_RECORD: Resampling from {working_rate}Hz to 16000Hz for Whisper...")
+                log.debug(f"WHISPER_RECORD: Resampling from {working_rate}Hz to 16000Hz for Whisper...")
                 try:
                     import librosa
                     audio_float = librosa.resample(audio_float, orig_sr=working_rate, target_sr=16000)
-                    print("🔥 WHISPER_RECORD: Resampling successful")
+                    log.debug(" WHISPER_RECORD: Resampling successful")
                 except ImportError:
-                    print("🚨 WHISPER_RECORD: librosa not available, using audio as-is")
+                    log.error(" WHISPER_RECORD: librosa not available, using audio as-is")
                     # Whisper can handle other sample rates, just not as optimal
                 except Exception as e:
-                    print(f"🚨 WHISPER_RECORD: Resampling failed: {e}, using audio as-is")
+                    log.error(f"WHISPER_RECORD: Resampling failed: {e}, using audio as-is")
             
             # Check for minimum audio length
             if len(audio_float) < 0.1 * 16000:  # Less than 0.1 seconds
-                print("Audio too short")
+                log.debug("Audio too short")
                 self.callback("", "too_short")
                 return
             
             # Transcribe directly with Whisper (no temp file needed)
             try:
                 if self.whisper_model:
-                    print("🔥 WHISPER: Starting transcription with faster-whisper...")
-                    print(f"🔥 WHISPER: Audio length: {len(audio_float)} samples")
+                    log.info(" WHISPER: Starting transcription with faster-whisper...")
+                    log.debug(f"WHISPER: Audio length: {len(audio_float)} samples")
                     
                     segments, info = self.whisper_model.transcribe(audio_float)
-                    print("🔥 WHISPER: Transcription completed, processing segments...")
+                    log.debug(" WHISPER: Transcription completed, processing segments...")
                     
                     text = "".join([segment.text for segment in segments]).strip()
                     language = info.language if hasattr(info, 'language') else "en"
                     
-                    print(f"🔥 WHISPER: Result text: '{text}' (language: {language})")
-                    print(f"🔥 WHISPER: About to call callback...")
+                    log.debug(f"WHISPER: Result text: '{text}' (language: {language})")
+                    log.debug(f"WHISPER: About to call callback...")
                     
                     if text:
-                        print(f"🔥 WHISPER: Calling callback with text: '{text}', '{language}'")
+                        log.debug(f"WHISPER: Calling callback with text: '{text}', '{language}'")
                         self.callback(text, language)
-                        print(f"🔥 WHISPER: Callback completed successfully")
+                        log.debug(f"WHISPER: Callback completed successfully")
                     else:
-                        print(f"🔥 WHISPER: Empty result, calling callback with no_speech")
+                        log.debug(f"WHISPER: Empty result, calling callback with no_speech")
                         self.callback("", "no_speech")
-                        print(f"🔥 WHISPER: No speech callback completed")
+                        log.debug(f"WHISPER: No speech callback completed")
                 else:
-                    print("🚨 WHISPER: Model not loaded!")
+                    log.error(" WHISPER: Model not loaded!")
                     self.callback("", "model_error")
                     
             except Exception as e:
-                print(f"🚨 WHISPER: Transcription error: {e}")
+                log.error(f"WHISPER: Transcription error: {e}")
                 import traceback
                 traceback.print_exc()
                 self.callback("", "transcription_error")
                 
         except Exception as e:
-            print(f"Whisper recording setup error: {e}")
+            log.error(f"Whisper recording setup error: {e}")
             self.callback("ERROR: Whisper recording failed", "error")

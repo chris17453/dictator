@@ -23,7 +23,7 @@ def main():
         return
     
     # Otherwise, start the GUI
-    print(f"🎤 Starting DICTATOR v{__version__}...")
+    log.info(f"Starting DICTATOR v{__version__}...")
     
     try:
         from gui import start_gui

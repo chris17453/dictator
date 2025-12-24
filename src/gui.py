@@ -46,7 +46,7 @@ def set_app_icon():
                 with pkg_resources.path("src.icons", f"dictator-{size}.png") as icon_path:
                     if icon_path.exists():
                         app_icon.addFile(str(icon_path), QSize(int(size), int(size)))
-                        print(f"🎯 Added app icon size {size}x{size} from package")
+                        log.debug(f"Added app icon size {size}x{size} from package")
                         icon_loaded = True
             except:
                 pass
