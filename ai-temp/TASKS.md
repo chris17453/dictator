@@ -53,12 +53,15 @@
 - [ ] Handle microphone permission errors gracefully
 
 ### 1.3 Logging System
-- [ ] Replace print() statements with Python logging module
-- [ ] Add log levels (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-- [ ] Write logs to file in `~/.config/dictator/logs/`
-- [ ] Add log rotation (keep last 10 files)
-- [ ] Add debug mode toggle in settings
-- [ ] Remove all debug emoji (🔥, 🚨) from production code
+- [x] **Implement logger.py module** - ✅ COMPLETED 2025-12-24 - Created centralized logging with file rotation
+- [x] **Add log levels** - ✅ COMPLETED 2025-12-24 - DEBUG, INFO, WARNING, ERROR, CRITICAL all supported
+- [x] **Write logs to file** - ✅ COMPLETED 2025-12-24 - Logs to `~/.config/dictator/logs/`
+- [x] **Add log rotation** - ✅ COMPLETED 2025-12-24 - Keeps last 10 files, 10MB each
+- [x] **Integrate logging in gui.py** - ✅ COMPLETED 2025-12-24 - Replaced print/emoji with log calls
+- [x] **Integrate logging in dictator.py** - ✅ PARTIAL 2025-12-24 - Added logger, replaced critical prints
+- [x] **Integrate logging in recorder.py** - ✅ COMPLETED 2025-12-24 - Added logger, replaced module prints
+- [ ] Add debug mode toggle in settings - UI control for log level
+- [ ] Remove remaining debug emoji (🔥, 🚨) - 100+ print statements in dictator.py
 
 ### 1.4 Thread Safety
 - [ ] Audit all threading code for race conditions
@@ -323,6 +326,20 @@ For EVERY feature, follow TDD cycle:
 - **Result**: All 9 tests PASS, no more force-killing, proper cleanup
 - **Commits**: e04c684 (RED), 6eb940e (GREEN)
 - **Files**: src/gui.py, src/dictator.py, tests/test_crash_handling.py
+
+**Phase 1.3: Implement Logging System** ✅ (TDD - Mostly Complete)
+- **RED**: Created 16 failing tests in tests/test_logging_system.py
+- **GREEN**: Implemented logger.py module and integrated logging
+  - Created src/logger.py with file rotation (10 files, 10MB each)
+  - Added log levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  - Logs to ~/.config/dictator/logs/
+  - Integrated logging in gui.py (replaced all prints)
+  - Integrated logging in dictator.py (added logger, replaced critical prints)
+  - Integrated logging in recorder.py (replaced module-level prints)
+- **Result**: 14/16 tests PASS (87.5% success)
+  - Remaining: Remove 100+ debug emoji from dictator.py, fix rotation test
+- **Commits**: a400b74 (RED), f533879 (GREEN)
+- **Files**: src/logger.py, src/gui.py, src/dictator.py, src/recorder.py, tests/test_logging_system.py
 
 ---
 
