@@ -1,7 +1,38 @@
 # DICTATOR - Development Task List
 
 **Goal:** Complete Alpha/Beta features, then build towards enterprise dictation app
+**Development Approach:** Test-Driven Development (TDD) for all features
 **Last Updated:** 2025-12-24
+
+---
+
+## 🧪 TDD Workflow (MANDATORY FOR ALL TASKS)
+
+**Red-Green-Refactor Cycle:**
+
+1. **RED** - Write failing test first
+   - Define expected behavior in test
+   - Run test to confirm it fails
+   - Commit: `test: add failing test for [feature]`
+
+2. **GREEN** - Write minimal code to pass test
+   - Implement feature to make test pass
+   - Run tests to confirm success
+   - Commit: `feat: implement [feature]`
+
+3. **REFACTOR** - Improve code quality
+   - Clean up implementation
+   - Ensure tests still pass
+   - Commit: `refactor: improve [feature] implementation`
+
+**Test Requirements:**
+- ✅ Unit tests for all business logic
+- ✅ Integration tests for component interactions
+- ✅ Qt/UI tests for GUI components
+- ✅ Minimum 80% code coverage for new code
+- ✅ All tests must pass before merging
+
+**No code without tests. No exceptions.**
 
 ---
 
@@ -207,14 +238,47 @@
 
 ---
 
-## Testing Tasks (Per Feature)
+## Testing Infrastructure (Phase 0 - Setup First!)
 
-For each feature implemented:
-- [ ] Write unit tests
-- [ ] Write integration tests
-- [ ] Manual testing checklist
-- [ ] Performance testing
-- [ ] Security testing
+Before starting Phase 1, set up testing infrastructure:
+- [ ] **Install test dependencies**: `pip install pytest pytest-cov pytest-qt pytest-mock`
+- [ ] **Create test structure**: Ensure `tests/` directory structure mirrors `src/`
+- [ ] **Configure pytest**: Update `pytest.ini` with coverage settings
+- [ ] **Set up test fixtures**: Create reusable test fixtures for common objects
+- [ ] **Add test helpers**: Create mock objects for Qt, audio, Whisper
+- [ ] **Verify test runner**: Ensure `pytest` runs successfully
+
+## TDD Test Requirements (Per Feature - MANDATORY)
+
+For EVERY feature, follow TDD cycle:
+
+**1. Unit Tests (Write BEFORE implementation)**
+- [ ] Test happy path (expected behavior)
+- [ ] Test edge cases (boundary conditions)
+- [ ] Test error cases (invalid inputs)
+- [ ] Test state changes (before/after)
+- [ ] Mock external dependencies (file I/O, network, Qt widgets)
+
+**2. Integration Tests (After unit tests pass)**
+- [ ] Test component interactions
+- [ ] Test data flow between modules
+- [ ] Test UI signal/slot connections
+
+**3. Manual Testing (Before marking complete)**
+- [ ] Create manual test checklist
+- [ ] Test on actual hardware (microphone, etc.)
+- [ ] Test UI behavior
+- [ ] Test user workflows
+
+**4. Performance Testing (For performance-critical features)**
+- [ ] Benchmark execution time
+- [ ] Test memory usage
+- [ ] Test under load
+
+**5. Security Testing (For security-related features)**
+- [ ] Test input validation
+- [ ] Test permission checks
+- [ ] Test data encryption/sanitization
 
 ---
 
@@ -245,15 +309,34 @@ _None yet - let's get started!_
 
 ---
 
-## Task Workflow
+## Task Workflow (TDD Approach)
 
-1. Pick a task from current phase
-2. Create feature branch: `git checkout -b feature/task-name`
-3. Implement feature
-4. Test thoroughly
-5. Commit with descriptive message
-6. Mark task as complete in this file
-7. Move to completed section
-8. Continue!
+1. **Pick** a task from current phase
+2. **Branch**: `git checkout -b feature/task-name`
+3. **RED**: Write failing test
+   - Create test file: `tests/test_feature_name.py`
+   - Write test that defines expected behavior
+   - Run: `pytest tests/test_feature_name.py` (should FAIL)
+   - Commit: `test: add failing test for [feature]`
+4. **GREEN**: Implement minimal code to pass
+   - Write feature implementation
+   - Run: `pytest tests/test_feature_name.py` (should PASS)
+   - Commit: `feat: implement [feature]`
+5. **REFACTOR**: Clean up and optimize
+   - Improve code quality
+   - Run: `pytest` (all tests should still PASS)
+   - Commit: `refactor: improve [feature] implementation`
+6. **Verify**: Run full test suite
+   - `pytest --cov=src tests/`
+   - Ensure 80%+ coverage for new code
+7. **Document**: Update this TASKS.md
+   - Mark task as complete: `[x]`
+   - Move to completed section with date
+8. **Merge**: Merge feature branch
+   - `git checkout main && git merge feature/task-name`
 
-Remember: One feature at a time, one commit per feature. Build it right!
+**Remember:**
+- Red-Green-Refactor cycle for EVERY task
+- No code without tests
+- One feature at a time
+- Build it right!
