@@ -47,10 +47,10 @@
 
 ### 1.2 Error Handling
 - [ ] Replace all bare `except: pass` with proper error handling
-- [ ] Add user-facing error dialogs for failures
-- [ ] Implement config load/save error reporting
-- [ ] Add error recovery for failed transcriptions
-- [ ] Handle microphone permission errors gracefully
+- [x] **Add user-facing error dialogs** - ✅ COMPLETED 2025-12-24 - Modal QMessageBox dialogs for all user-facing errors
+- [x] **Implement config load/save error reporting** - ✅ COMPLETED 2025-12-24 - Dialogs for config corruption and save failures
+- [x] **Add error recovery for failed transcriptions** - ✅ COMPLETED 2025-12-24 - Error dialogs with troubleshooting steps
+- [x] **Handle microphone permission errors gracefully** - ✅ COMPLETED 2025-12-24 - Clear error messages with actionable suggestions
 
 ### 1.3 Logging System
 - [x] **Implement logger.py module** - ✅ COMPLETED 2025-12-24 - Created centralized logging with file rotation
@@ -396,6 +396,20 @@ For EVERY feature, follow TDD cycle:
 - **Result**: All 149 tests passing (100%)
 - **Commits**: 84b01b4 (test fixes)
 - **Files**: tests/test_cli.py, tests/test_logging_system.py, tests/test_main.py
+
+**Phase 1.2: User-Facing Error Dialogs** ✅ (TDD Complete)
+- **RED**: Created 20 comprehensive tests in tests/test_error_dialogs.py
+- **GREEN**: Implemented show_error_dialog method and error handling
+  - Added show_error_dialog() method to DictatorWindow
+  - Modal QMessageBox.Critical dialogs with helpful messages
+  - Recording errors show dialog with troubleshooting checklist
+  - Config load errors show dialog when main and backup both fail
+  - Config save errors show dialog for permission/encoding errors
+  - All errors logged while showing user-facing dialog
+- **Result**: All 20 tests PASS (100%) - 169 total tests passing
+- **Commits**: 9b0d2ec (RED), 9a5102b (GREEN)
+- **Files**: src/dictator.py, tests/test_error_dialogs.py
+- **User Impact**: Users now get clear, actionable error messages instead of silent failures
 
 ---
 
