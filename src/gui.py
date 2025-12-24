@@ -94,26 +94,6 @@ def start_gui(no_tray=False):
 
     window = None
 
-    def monitor_main_thread(window):
-        """Monitor main thread for crashes"""
-        import time
-
-        while True:
-            time.sleep(0.5)  # Check every 500ms
-            try:
-                if not window or not hasattr(window, 'isVisible'):
-                    print("🚨 MONITOR: Window object invalid! Force killing process...")
-                    import os
-                    os._exit(1)
-            except RuntimeError as e:
-                print(f"🚨 MONITOR: Window RuntimeError: {e}! Force killing process...")
-                import os
-                os._exit(1)
-            except Exception as e:
-                print(f"🚨 MONITOR: Window exception: {e}! Force killing process...")
-                import os
-                os._exit(1)
-
     try:
         print("🚀 Starting Qt application...")
         app = QApplication(sys.argv)
@@ -157,35 +137,28 @@ def start_gui(no_tray=False):
         
         print("🚀 Showing window...")
         window.show()
-        
-        # Start monitoring thread to detect crashes
-        import threading
-        monitor_thread = threading.Thread(target=lambda: monitor_main_thread(window), daemon=True)
-        monitor_thread.start()
-        
+
         exit_code = app.exec()
         print(f"🚨 App event loop ended with code: {exit_code}")
-        
+
         # If we get here, the app closed normally
         if window and hasattr(window, 'close_application'):
             window.close_application()
-        
-        import os
-        os._exit(exit_code)
+
+        sys.exit(exit_code)
         
     except Exception as e:
         print(f"🚨 FATAL ERROR IN GUI: {e}")
         import traceback
         traceback.print_exc()
-        
+
         if window and hasattr(window, 'close_application'):
             try:
                 window.close_application()
             except:
                 pass
-        
-        import os
-        os._exit(1)
+
+        sys.exit(1)
 
 
 if __name__ == "__main__":

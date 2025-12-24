@@ -1359,10 +1359,10 @@ class DictatorWindow(QMainWindow):
         if self.is_closing:
             print("Already closing, ignoring duplicate close request...")
             return
-        
+
         self.is_closing = True
-        
-        # Stop all audio processing like SAI
+
+        # Stop all audio processing and cleanup resources
         print("Closing application...")
         if hasattr(self, 'volume_timer'):
             self.volume_timer.stop()
@@ -1377,10 +1377,16 @@ class DictatorWindow(QMainWindow):
         self.recorder.stop_monitoring()
         self.recorder.stop_recording()
         self.hotkey_manager.stop()
-        
-        # Force quit the entire process
-        print("Force quitting process...")
-        os._exit(0)  # Force immediate exit
+
+        # Save config before exiting
+        try:
+            self.save_config()
+        except Exception as e:
+            print(f"Warning: Could not save config during shutdown: {e}")
+
+        # Use proper Qt shutdown instead of force exit
+        print("Shutting down gracefully...")
+        QApplication.quit()
     
     def closeEvent(self, event):
         self.close_application()
