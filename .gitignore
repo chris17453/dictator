@@ -66,4 +66,6 @@ config.json
 settings.json
 
 # AI documentation and temporary files
-ai-temp/
+ai-temp/*
+!ai-temp/TASKS.md
+!ai-temp/GAPS.md
