@@ -43,7 +43,7 @@
 - [x] **Fix resource cleanup** - ✅ COMPLETED 2025-12-24 - Replaced os._exit(0) with QApplication.quit() and proper cleanup
 - [ ] **Fix config file corruption** - Add validation and backup before save
 - [ ] **Fix audio device disconnect handling** - Graceful handling when mic unplugged
-- [ ] **Fix SSL verification** - Remove SSL bypass for Whisper downloads (recorder.py:83)
+- [x] **Fix SSL verification** - ✅ COMPLETED 2025-12-24 - Removed SSL bypass, enabled secure certificate verification
 
 ### 1.2 Error Handling
 - [ ] Replace all bare `except: pass` with proper error handling
@@ -340,6 +340,18 @@ For EVERY feature, follow TDD cycle:
   - Remaining: Remove 100+ debug emoji from dictator.py, fix rotation test
 - **Commits**: a400b74 (RED), f533879 (GREEN)
 - **Files**: src/logger.py, src/gui.py, src/dictator.py, src/recorder.py, tests/test_logging_system.py
+
+**Phase 1.1.5: Fix SSL Verification** ✅ (TDD Complete)
+- **RED**: Created 9 failing tests in tests/test_ssl_security.py
+- **GREEN**: Removed SSL bypass from recorder.py
+  - Removed ssl._create_unverified_context (2 instances)
+  - Removed modification of ssl._create_default_https_context
+  - SSL certificate verification now properly enabled
+  - Added documentation for certificate troubleshooting
+- **Result**: All 9 tests PASS - Security vulnerability eliminated
+- **Commits**: 9338d0a (RED), 4a86167 (GREEN)
+- **Files**: src/recorder.py, tests/test_ssl_security.py
+- **Security Impact**: Prevents man-in-the-middle attacks, validates certificates
 
 ---
 
