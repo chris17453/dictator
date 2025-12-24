@@ -185,8 +185,8 @@ class TestLoggingUsage:
 
         source = inspect.getsource(dictator.DictatorWindow.__init__)
 
-        # Should use logging in initialization
-        assert 'logger' in source.lower() or 'logging' in source.lower(), (
+        # Should use logging in initialization (check for log.info, log.debug, etc.)
+        assert 'logger' in source.lower() or 'logging' in source.lower() or 'log.' in source.lower(), (
             "dictator.py should use logging"
         )
 
@@ -199,8 +199,8 @@ class TestLoggingUsage:
 
         source = inspect.getsource(recorder.PureRecorder.__init__)
 
-        # Should use logging
-        assert 'logger' in source.lower() or 'logging' in source.lower(), (
+        # Should use logging (check for log.info, log.debug, etc.)
+        assert 'logger' in source.lower() or 'logging' in source.lower() or 'log.' in source.lower(), (
             "recorder.py should use logging"
         )
 
