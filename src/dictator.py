@@ -187,7 +187,25 @@ class DictatorWindow(QMainWindow):
                 self._safe_type_text(text)
         except Exception as e:
             log.error(f"Error handling UI update {request.action}: {e}")
-    
+
+    def show_error_dialog(self, title, message):
+        """
+        Show user-facing error dialog with helpful information.
+
+        Args:
+            title: Dialog title (e.g., "Configuration Error", "Recording Error")
+            message: Error message with details and suggested actions
+        """
+        log.error(f"Error dialog - {title}: {message}")
+
+        # Show modal error dialog to user
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Icon.Critical)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg_box.exec()
+
     def init_ui(self):
         self.setWindowTitle(f"DICTATOR v{__version__}")
         self.setObjectName("DICTATOR")
@@ -1000,13 +1018,32 @@ class DictatorWindow(QMainWindow):
     def _safe_handle_transcription(self, text, language):
         """Safe transcription handler that runs on main thread"""
         log.debug(f"SAFE_HANDLE_TRANSCRIPTION: '{text}' (language: {language})")
-        
+
         # Stop recording
         self.stop_recording()
-        
+
+        # Handle errors first, regardless of text content
+        if language == "error":
+            error_message = text if text else "An unknown error occurred during recording"
+            log.error(f"Transcription error: {error_message}")
+
+            # Show error dialog to user with the actual error message
+            self.show_error_dialog(
+                "Recording Error",
+                f"{error_message}\n\nPlease check:\n"
+                "• Microphone is connected and selected\n"
+                "• Microphone permissions are granted\n"
+                "• No other application is using the microphone"
+            )
+
+            self.request_ui_update("update_status",
+                                 status="❌ Recording error",
+                                 style="color: #FF9800; font-size: 13px;")
+            return
+
         if text and text.strip():
             log.debug(f"Queuing add_history_item for: '{text.strip()}'")
-            
+
             # Check if our window is active - if not, type the text as keystrokes
             if not self.isActiveWindow():
                 log.debug(" KEYBOARD: Window not active, typing text as keystrokes...")
@@ -1015,20 +1052,18 @@ class DictatorWindow(QMainWindow):
                 log.debug(" CLIPBOARD: Window is active, using clipboard...")
                 # Queue clipboard copy to ensure it runs on main thread
                 self.request_ui_update("copy_to_clipboard", text=text.strip())
-            
+
             self.request_ui_update("add_history_item", text=text.strip())
-            self.request_ui_update("update_status", 
-                                 status="Dictation complete", 
+            self.request_ui_update("update_status",
+                                 status="Dictation complete",
                                  style="color: #4CAF50; font-size: 13px;")
         else:
             if language == "timeout":
                 status = "⏱️ No speech detected - timeout"
-            elif language == "error":
-                status = "❌ Recording error"
             else:
                 status = "❌ No speech detected"
-            self.request_ui_update("update_status", 
-                                 status=status, 
+            self.request_ui_update("update_status",
+                                 status=status,
                                  style="color: #FF9800; font-size: 13px;")
         
         # Temporarily disable auto-hide to reduce timer interactions
@@ -1554,6 +1589,15 @@ class DictatorWindow(QMainWindow):
             except Exception as e:
                 log.error(f"Error reading backup config: {e}")
 
+        # Both main and backup failed - show error to user
+        self.show_error_dialog(
+            "Configuration Error",
+            f"Could not load configuration file.\n\n"
+            f"Config file: {self.config_path}\n"
+            f"Backup file: {backup_path}\n\n"
+            f"Using default settings. Your settings will be saved when you close the app."
+        )
+
         return None
     
     def save_config(self):
@@ -1626,11 +1670,30 @@ class DictatorWindow(QMainWindow):
 
         except PermissionError as e:
             log.error(f"Permission denied saving config: {e}")
+            self.show_error_dialog(
+                "Configuration Save Error",
+                f"Permission denied saving configuration.\n\n"
+                f"Config file: {self.config_path}\n\n"
+                f"Please check:\n"
+                f"• File permissions on the config directory\n"
+                f"• You have write access to {self.config_path.parent}"
+            )
         except json.JSONEncodeError as e:
             log.error(f"Error encoding config to JSON: {e}")
+            self.show_error_dialog(
+                "Configuration Save Error",
+                f"Error encoding configuration to JSON.\n\n"
+                f"Error: {e}\n\n"
+                f"Your settings may not be saved correctly."
+            )
         except Exception as e:
             log.error(f"Error saving config: {e}")
-            # Don't crash on config save errors
+            self.show_error_dialog(
+                "Configuration Save Error",
+                f"An unexpected error occurred saving configuration.\n\n"
+                f"Error: {e}\n\n"
+                f"Your settings may not be saved."
+            )
     
     # Compositor-aware window dragging
     def mousePressEvent(self, event):
