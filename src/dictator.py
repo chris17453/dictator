@@ -32,6 +32,7 @@ try:
     from version import __version__
     from settings_ui import SettingsDialog
     from common_ui import ResizeGrip, DraggableFrame
+    from logger import get_logger
 except ImportError:
     # Handle relative imports when running as module
     from .recorder import PureRecorder
@@ -40,11 +41,16 @@ except ImportError:
     from .version import __version__
     from .settings_ui import SettingsDialog
     from .common_ui import ResizeGrip, DraggableFrame
+    from .logger import get_logger
+
+# Initialize logger
+log = get_logger(__name__)
 
 
 class DictatorWindow(QMainWindow):
     def __init__(self, no_tray=False):
         super().__init__()
+        log.info("Initializing DICTATOR window")
         self.recorder = PureRecorder()
         # Load hotkey from config or use default
         self.current_hotkey = ["Ctrl", "Space"]  # Default
@@ -1363,7 +1369,7 @@ class DictatorWindow(QMainWindow):
         self.is_closing = True
 
         # Stop all audio processing and cleanup resources
-        print("Closing application...")
+        log.info("Closing application")
         if hasattr(self, 'volume_timer'):
             self.volume_timer.stop()
         if hasattr(self, 'hide_timer'):
@@ -1382,10 +1388,10 @@ class DictatorWindow(QMainWindow):
         try:
             self.save_config()
         except Exception as e:
-            print(f"Warning: Could not save config during shutdown: {e}")
+            log.warning(f"Could not save config during shutdown: {e}")
 
         # Use proper Qt shutdown instead of force exit
-        print("Shutting down gracefully...")
+        log.info("Shutting down gracefully")
         QApplication.quit()
     
     def closeEvent(self, event):

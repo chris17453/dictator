@@ -11,26 +11,35 @@ import subprocess
 import numpy as np
 from pathlib import Path
 
+# Import logger
+try:
+    from logger import get_logger
+except ImportError:
+    from .logger import get_logger
+
+log = get_logger(__name__)
+
 # Try to import Whisper for local speech recognition
 try:
     from faster_whisper import WhisperModel
     WHISPER_AVAILABLE = True
-    print("✅ Whisper available - using local speech recognition")
+    log.info("Whisper available - using local speech recognition")
 except ImportError:
     WHISPER_AVAILABLE = False
-    print("⚠️ Whisper not available - using Google Speech Recognition")
+    log.warning("Whisper not available - using Google Speech Recognition")
 
 try:
     import sounddevice as sd
     SOUNDDEVICE_AVAILABLE = True
-    print("✅ SoundDevice available - audio functionality enabled")
+    log.info("SoundDevice available - audio functionality enabled")
 except ImportError:
     SOUNDDEVICE_AVAILABLE = False
-    print("⚠️ SoundDevice not available - audio functionality limited")
+    log.warning("SoundDevice not available - audio functionality limited")
 
 
 class PureRecorder:
     def __init__(self):
+        log.debug("Initializing PureRecorder")
         self.is_recording = False
         self.current_microphone_index = None
         self.audio_data = []
