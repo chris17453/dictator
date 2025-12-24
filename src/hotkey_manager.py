@@ -4,6 +4,9 @@ Global hotkey management for Dictator
 """
 import os
 
+from logger import get_logger
+log = get_logger(__name__)
+
 
 class HotkeyManager:
     def __init__(self, hotkey_combination=None):
@@ -201,21 +204,21 @@ class HotkeyManager:
         try:
             groups_output = subprocess.check_output(['groups'], text=True)
             if 'input' not in groups_output:
-                log.debug()
+                log.debug("")
                 log.error(" HOTKEY PERMISSIONS ISSUE:")
                 log.debug("   Global hotkeys require access to input devices.")
                 log.debug("   Your user is not in the 'input' group.")
-                log.debug()
+                log.debug("")
                 log.debug("💡 To fix this, run the setup script:")
                 log.debug("   ~/.local/share/dictator/setup-permissions.sh")
                 log.debug("   OR manually: sudo usermod -a -G input $USER")
                 log.debug("   Then log out and back in.")
-                log.debug()
+                log.debug("")
                 log.debug("🔧 Alternative: Run DICTATOR with sudo (not recommended)")
                 log.debug("   sudo dictator")
-                log.debug()
+                log.debug("")
                 log.debug("ℹ️  DICTATOR will work without hotkeys, use the GUI buttons instead.")
-                log.debug()
+                log.debug("")
         except Exception:
             log.error(" HOTKEY: Permission check failed - hotkeys may not work")
             log.debug("ℹ️  Try running: sudo usermod -a -G input $USER")

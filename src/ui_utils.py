@@ -7,6 +7,9 @@ import time
 import threading
 from PyQt6.QtCore import QTimer
 
+from logger import get_logger
+log = get_logger(__name__)
+
 
 class UIWatchdog:
     """Watchdog to detect UI crashes and kill the process"""

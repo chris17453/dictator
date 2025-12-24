@@ -9,6 +9,9 @@ import tempfile
 import os
 import time
 
+from logger import get_logger
+log = get_logger(__name__)
+
 def record_audio_sounddevice(device_index, sample_rate, max_duration=300):
     """
     Record audio using SoundDevice instead of PyAudio

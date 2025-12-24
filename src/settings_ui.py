@@ -3,6 +3,9 @@ import sys
 import json
 import os
 from pathlib import Path
+
+from logger import get_logger
+log = get_logger(__name__)
 try:
     import importlib.resources as pkg_resources
 except ImportError:

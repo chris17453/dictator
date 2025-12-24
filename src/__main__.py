@@ -7,10 +7,14 @@ Decides whether to run CLI or GUI based on arguments
 try:
     from cli import handle_cli
     from version import __version__
+    from logger import get_logger
 except ImportError:
     # Handle relative imports when running as module
     from .cli import handle_cli
     from .version import __version__
+    from .logger import get_logger
+
+log = get_logger(__name__)
 
 
 def main():

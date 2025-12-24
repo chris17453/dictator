@@ -18,6 +18,9 @@ import subprocess
 from pathlib import Path
 from PyQt6.QtWidgets import QApplication
 
+from logger import get_logger
+log = get_logger(__name__)
+
 
 def install_desktop_files():
     """Install desktop entry files for GNOME/KDE menu integration"""
