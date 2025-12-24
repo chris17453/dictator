@@ -78,8 +78,14 @@ class DictatorWindow(QMainWindow):
         # Font settings
         self.custom_translation_font_family = "Arial"
         self.custom_translation_font_size = 14
-        self.custom_history_font_family = "Arial" 
+        self.custom_history_font_family = "Arial"
         self.custom_history_font_size = 12
+
+        # Whisper model settings
+        self.whisper_model_size = "tiny"  # Default to tiny for fast loading
+        self.whisper_model_dir = str(Path.home() / ".config" / "dictator" / "models")
+        self.whisper_device = "auto"  # auto, cpu, cuda
+
         self.config_path = Path.home() / ".config" / "dictator" / "config.json"
         self.settings_visible = False
         
@@ -1465,6 +1471,18 @@ class DictatorWindow(QMainWindow):
                 self.custom_history_font_family = config.get('custom_history_font_family', 'Arial')
                 self.custom_history_font_size = config.get('custom_history_font_size', 12)
 
+                # Load Whisper model settings
+                self.whisper_model_size = config.get('whisper_model_size', 'tiny')
+                self.whisper_model_dir = config.get('whisper_model_dir', str(Path.home() / ".config" / "dictator" / "models"))
+                self.whisper_device = config.get('whisper_device', 'auto')
+
+                # Pass Whisper settings to recorder
+                if hasattr(self.recorder, 'whisper_model_size'):
+                    self.recorder.whisper_model_size = self.whisper_model_size
+                    self.recorder.whisper_model_dir = self.whisper_model_dir
+                    self.recorder.whisper_device = self.whisper_device
+
+                log.debug(f"CONFIG: Loaded Whisper settings - Model: {self.whisper_model_size}, Dir: {self.whisper_model_dir}, Device: {self.whisper_device}")
                 log.debug(f"CONFIG: Loaded colors - BG: {self.custom_bg_color}, Border: {self.custom_border_color}, Text: {self.custom_text_color}, Button: {self.custom_button_color}")
                 log.debug(f"CONFIG: Loaded translation colors - BG: {self.custom_translation_bg_color}, Text: {self.custom_translation_text_color}")
                 log.debug(f"CONFIG: Loaded history colors - BG: {self.custom_history_bg_color}, Text: {self.custom_history_text_color}")
@@ -1567,7 +1585,10 @@ class DictatorWindow(QMainWindow):
                 'custom_translation_font_family': getattr(self, 'custom_translation_font_family', 'Arial'),
                 'custom_translation_font_size': getattr(self, 'custom_translation_font_size', 14),
                 'custom_history_font_family': getattr(self, 'custom_history_font_family', 'Arial'),
-                'custom_history_font_size': getattr(self, 'custom_history_font_size', 12)
+                'custom_history_font_size': getattr(self, 'custom_history_font_size', 12),
+                'whisper_model_size': getattr(self, 'whisper_model_size', 'tiny'),
+                'whisper_model_dir': getattr(self, 'whisper_model_dir', str(Path.home() / ".config" / "dictator" / "models")),
+                'whisper_device': getattr(self, 'whisper_device', 'auto')
             }
 
             # Validate config is a dict

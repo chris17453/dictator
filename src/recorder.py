@@ -51,6 +51,11 @@ class PureRecorder:
         self.whisper_model = None
         self.whisper_model_name = "tiny"
         self.use_openai_whisper = False
+
+        # Whisper model configuration (set defaults, will be overridden from config)
+        self.whisper_model_size = "tiny"
+        self.whisper_model_dir = None  # Will use default if None
+        self.whisper_device = "auto"
         
         # Subprocess tracking for cleanup
         self.active_subprocess = None
@@ -90,34 +95,65 @@ class PureRecorder:
         system certificates: sudo dnf install ca-certificates (or equivalent)
         """
         try:
-            log.info("Loading Whisper model synchronously")
+            log.info(f"Loading Whisper model: {self.whisper_model_size}")
 
-            device = "cpu"
-            model_path = self.get_whisper_model_path()
+            # Determine device
+            if self.whisper_device == "auto":
+                try:
+                    import torch
+                    device = "cuda" if torch.cuda.is_available() else "cpu"
+                except ImportError:
+                    device = "cpu"
+            else:
+                device = self.whisper_device
+
+            # Determine model directory
+            if self.whisper_model_dir:
+                model_path = self.whisper_model_dir
+            else:
+                model_path = self.get_whisper_model_path()
+
             log.debug(f"Using model directory: {model_path}")
-            
-            # Try tiny model first - it's fastest to load
+            log.debug(f"Using device: {device}")
+
+            # Create model directory if it doesn't exist
+            Path(model_path).mkdir(parents=True, exist_ok=True)
+
+            # Load the requested model size
             try:
-                log.debug("Loading tiny Whisper model...")
+                log.debug(f"Loading {self.whisper_model_size} Whisper model...")
                 from faster_whisper import WhisperModel
                 self.whisper_model = WhisperModel(
-                    "tiny", 
+                    self.whisper_model_size,
                     device=device,
                     download_root=model_path
                 )
-                self.whisper_model_name = "tiny"
-                log.info(" Whisper tiny model loaded successfully")
+                self.whisper_model_name = self.whisper_model_size
+                log.info(f"Whisper {self.whisper_model_size} model loaded successfully")
                 log.debug(f"Model stored in: {model_path}")
                 return
             except Exception as e:
-                log.error(f"Failed to load tiny model: {e}")
-            
-            # Skip openai-whisper due to version conflicts
-            
+                log.error(f"Failed to load {self.whisper_model_size} model: {e}")
+
+                # Fallback to tiny model if requested model fails
+                if self.whisper_model_size != "tiny":
+                    log.warning("Falling back to tiny model...")
+                    try:
+                        self.whisper_model = WhisperModel(
+                            "tiny",
+                            device=device,
+                            download_root=model_path
+                        )
+                        self.whisper_model_name = "tiny"
+                        log.info("Whisper tiny model loaded successfully (fallback)")
+                        return
+                    except Exception as e2:
+                        log.error(f"Failed to load fallback tiny model: {e2}")
+
             # If all fails, error out
-            log.error("❌ FATAL: Could not load any Whisper model")
+            log.error("FATAL: Could not load any Whisper model")
             self.whisper_model = None
-            
+
         except Exception as e:
             log.error(f"Whisper loading error: {e}")
             self.whisper_model = None

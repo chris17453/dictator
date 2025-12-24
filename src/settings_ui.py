@@ -204,7 +204,77 @@ class SettingsDialog(QDialog):
         
         mic_layout.addRow("Microphone:", mic_row)
         audio_layout.addWidget(mic_group)
-        
+
+        # Whisper Model Settings
+        whisper_group = QGroupBox("Whisper Model Settings")
+        whisper_layout = QFormLayout(whisper_group)
+
+        # Model selection dropdown
+        self.model_combo = QComboBox()
+        self.model_combo.addItems(['tiny', 'base', 'small', 'medium', 'large-v2', 'large-v3'])
+        self.model_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+                min-height: 20px;
+            }
+            QComboBox::drop-down {
+                border: none;
+                background-color: #4CAF50;
+                width: 20px;
+                border-top-right-radius: 4px;
+                border-bottom-right-radius: 4px;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid white;
+                width: 0px;
+                height: 0px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #333;
+                color: white;
+                selection-background-color: #4CAF50;
+                border: 1px solid #4CAF50;
+            }
+        """)
+        whisper_layout.addRow("Model Size:", self.model_combo)
+
+        # Model directory selection
+        self.model_dir_input = QLineEdit()
+        self.model_dir_input.setPlaceholderText("~/.config/dictator/models")
+        self.model_dir_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+            }
+        """)
+
+        browse_btn = QPushButton("Browse...")
+        browse_btn.clicked.connect(self.browse_model_directory)
+
+        model_dir_row = QHBoxLayout()
+        model_dir_row.addWidget(self.model_dir_input)
+        model_dir_row.addWidget(browse_btn)
+
+        whisper_layout.addRow("Model Directory:", model_dir_row)
+
+        # Device selection (CPU/GPU)
+        self.device_combo = QComboBox()
+        self.device_combo.addItems(['auto', 'cpu', 'cuda'])
+        self.device_combo.setStyleSheet(self.model_combo.styleSheet())
+        whisper_layout.addRow("Compute Device:", self.device_combo)
+
+        audio_layout.addWidget(whisper_group)
+
         tabs.addTab(audio_tab, "Audio")
         
         # Appearance tab
@@ -575,7 +645,10 @@ class SettingsDialog(QDialog):
         if hasattr(self.parent_window, 'custom_history_font_family'):
             self.history_font_btn.setText(f"🔤 {self.parent_window.custom_history_font_family}")
             self.history_font_size_spin.setValue(getattr(self.parent_window, 'custom_history_font_size', 12))
-        
+
+        # Load Whisper model settings
+        self.load_whisper_settings()
+
         # Update history stats
         self.update_history_stats()
     
@@ -599,7 +672,59 @@ class SettingsDialog(QDialog):
                     if device_index == self.parent_window.recorder.current_microphone_index:
                         self.microphone_combo.setCurrentIndex(i)
                         log.debug(f"REFRESH_MIC: Selected current device at combo index {i}")
-    
+
+    def browse_model_directory(self):
+        """Browse for model directory"""
+        from PyQt6.QtWidgets import QFileDialog
+
+        current_dir = self.model_dir_input.text() or str(Path.home() / ".config" / "dictator" / "models")
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select Whisper Model Directory",
+            current_dir
+        )
+
+        if directory:
+            self.model_dir_input.setText(directory)
+
+    def load_whisper_settings(self):
+        """Load Whisper model settings from parent window config"""
+        if not self.parent_window:
+            return
+
+        # Load model size
+        model_size = getattr(self.parent_window, 'whisper_model_size', 'tiny')
+        index = self.model_combo.findText(model_size)
+        if index >= 0:
+            self.model_combo.setCurrentIndex(index)
+
+        # Load model directory
+        model_dir = getattr(self.parent_window, 'whisper_model_dir',
+                           str(Path.home() / ".config" / "dictator" / "models"))
+        self.model_dir_input.setText(model_dir)
+
+        # Load device
+        device = getattr(self.parent_window, 'whisper_device', 'auto')
+        index = self.device_combo.findText(device)
+        if index >= 0:
+            self.device_combo.setCurrentIndex(index)
+
+    def save_whisper_settings(self):
+        """Save Whisper model settings to parent window"""
+        if not self.parent_window:
+            return
+
+        self.parent_window.whisper_model_size = self.model_combo.currentText()
+        self.parent_window.whisper_model_dir = self.model_dir_input.text()
+        self.parent_window.whisper_device = self.device_combo.currentText()
+
+        # Trigger model reload if recorder exists
+        if hasattr(self.parent_window, 'recorder'):
+            self.parent_window.recorder.whisper_model_size = self.parent_window.whisper_model_size
+            self.parent_window.recorder.whisper_model_dir = self.parent_window.whisper_model_dir
+            self.parent_window.recorder.whisper_device = self.parent_window.whisper_device
+            log.info(f"Updated Whisper settings: {self.parent_window.whisper_model_size}, {self.parent_window.whisper_model_dir}, {self.parent_window.whisper_device}")
+
     def update_opacity_alpha(self, value):
         """Update opacity using alpha channel (actually works!)"""
         self.opacity_label.setText(f"Opacity: {value}%")
@@ -1291,9 +1416,12 @@ class SettingsDialog(QDialog):
             opacity_value = self.opacity_slider.value()
             self.parent_window.update_window_alpha(opacity_value)
         
+        # Apply Whisper model settings
+        self.save_whisper_settings()
+
         # Apply custom colors and save config
         self.parent_window.apply_custom_colors()
         self.parent_window.save_config()
-        
+
         self.accept()
 
