@@ -1399,110 +1399,153 @@ class DictatorWindow(QMainWindow):
         event.accept()
     
     def load_config(self):
+        """Load configuration from file with backup restoration on corruption."""
         try:
             if self.config_path.exists():
-                with open(self.config_path, 'r') as f:
+                config = self._load_config_with_backup()
+                if config is None:
+                    log.warning("Could not load config or backup, using defaults")
+                    return
+
+                self.history = config.get('history', [])
+
+                # Load saved microphone selection
+                saved_mic_index = config.get('selected_microphone_index')
+                if saved_mic_index is not None:
+                    log.debug(f"CONFIG: Loaded saved microphone index: {saved_mic_index}")
+                    success = self.recorder.set_microphone(saved_mic_index)
+                    if success:
+                        log.info(f"CONFIG: Successfully restored microphone {saved_mic_index}")
+                    else:
+                        log.warning(f"CONFIG: Failed to restore microphone {saved_mic_index}")
+
+                # Load always on top setting
+                loaded_always_on_top = config.get('always_on_top', True)
+                if loaded_always_on_top != self.always_on_top:
+                    # Apply the loaded setting to update window flags
+                    self.toggle_always_on_top(loaded_always_on_top)
+                if hasattr(self, 'always_on_top_checkbox'):
+                    self.always_on_top_checkbox.setChecked(self.always_on_top)
+
+                # Load window opacity setting
+                saved_opacity_percent = config.get('window_opacity', 95)
+                # Handle old format (0.0-1.0) vs new format (0-100)
+                if saved_opacity_percent <= 1.0:
+                    saved_opacity_percent = int(saved_opacity_percent * 100)
+
+                self.current_opacity_percent = saved_opacity_percent
+                self.update_window_alpha(saved_opacity_percent)
+                log.debug(f"CONFIG: Loaded window opacity: {saved_opacity_percent}%")
+
+                # Load hotkey setting
+                saved_hotkey = config.get('hotkey_combination', ["Ctrl", "Space"])
+                self.current_hotkey = saved_hotkey
+                self.hotkey_manager.set_hotkey(saved_hotkey)
+                log.debug(f"CONFIG: Loaded hotkey: {self.hotkey_manager.get_hotkey_string()}")
+
+                # Load session management
+                self.current_session = config.get('current_session', 'Default')
+                self.current_session_history = config.get('current_session_history', [])
+                self.saved_sessions = config.get('saved_sessions', [])
+                log.debug(f"CONFIG: Loaded session: {self.current_session} ({len(self.current_session_history)} entries)")
+
+                # Load custom colors
+                self.custom_bg_color = config.get('custom_bg_color', '#141414')
+                self.custom_border_color = config.get('custom_border_color', '#4CAF50')
+                self.custom_text_color = config.get('custom_text_color', '#ffffff')
+                self.custom_button_color = config.get('custom_button_color', '#4CAF50')
+                self.custom_translation_bg_color = config.get('custom_translation_bg_color', '#1a1a1a')
+                self.custom_translation_text_color = config.get('custom_translation_text_color', '#ffffff')
+                self.custom_history_bg_color = config.get('custom_history_bg_color', '#0f0f0f')
+                self.custom_history_text_color = config.get('custom_history_text_color', '#cccccc')
+
+                # Load font settings
+                self.custom_translation_font_family = config.get('custom_translation_font_family', 'Arial')
+                self.custom_translation_font_size = config.get('custom_translation_font_size', 14)
+                self.custom_history_font_family = config.get('custom_history_font_family', 'Arial')
+                self.custom_history_font_size = config.get('custom_history_font_size', 12)
+
+                log.debug(f"CONFIG: Loaded colors - BG: {self.custom_bg_color}, Border: {self.custom_border_color}, Text: {self.custom_text_color}, Button: {self.custom_button_color}")
+                log.debug(f"CONFIG: Loaded translation colors - BG: {self.custom_translation_bg_color}, Text: {self.custom_translation_text_color}")
+                log.debug(f"CONFIG: Loaded history colors - BG: {self.custom_history_bg_color}, Text: {self.custom_history_text_color}")
+                log.debug(f"CONFIG: Loaded fonts - Translation: {self.custom_translation_font_family} {self.custom_translation_font_size}px, History: {self.custom_history_font_family} {self.custom_history_font_size}px")
+
+                # Apply custom colors to UI
+                self.apply_custom_colors()
+
+                for item in self.history:
+                    # Handle both old format (string) and new format (dict)
+                    if isinstance(item, str):
+                        # Old format - migrate to new format
+                        text = item
+                        session_name = "Legacy"
+                        item_dict = {'text': text, 'session': session_name, 'timestamp': ''}
+                        # Replace old string with new dict format
+                        item_idx = self.history.index(item)
+                        self.history[item_idx] = item_dict
+                    else:
+                        # New format
+                        text = item.get('text', '')
+                        session_name = item.get('session', 'Unknown')
+
+                    # Create clickable history item during load with session name
+                    item_btn = QPushButton(f"📝 [{session_name}] {text}")
+                    item_btn.setStyleSheet(self.get_themed_history_item_style())
+                    item_btn.clicked.connect(lambda checked, t=text: self.show_history_item(t))
+                    self.history_layout.addWidget(item_btn)
+
+                # Update toggle button text after loading
+                if hasattr(self, 'history_toggle'):
+                    self.history_toggle.setText(f"📜 History ({len(self.history)} items) ▼")
+        except json.JSONDecodeError as e:
+            log.error(f"Config file corrupted (invalid JSON): {e}")
+            # Use defaults
+        except Exception as e:
+            log.error(f"Error loading config: {e}")
+            # Use defaults
+
+    def _load_config_with_backup(self):
+        """Load config from main file, try backup if corrupted."""
+        backup_path = self.config_path.with_suffix('.json.bak')
+
+        # Try main config first
+        try:
+            with open(self.config_path, 'r') as f:
+                config = json.load(f)
+                # Validate it's a dict
+                if not isinstance(config, dict):
+                    raise ValueError("Config is not a dictionary")
+                return config
+        except json.JSONDecodeError as e:
+            log.error(f"Main config corrupted: {e}")
+        except Exception as e:
+            log.error(f"Error reading main config: {e}")
+
+        # Try backup
+        if backup_path.exists():
+            log.info("Attempting to restore from backup...")
+            try:
+                with open(backup_path, 'r') as f:
                     config = json.load(f)
-                    self.history = config.get('history', [])
-                    
-                    # Load saved microphone selection
-                    saved_mic_index = config.get('selected_microphone_index')
-                    if saved_mic_index is not None:
-                        print(f"🔥 CONFIG: Loaded saved microphone index: {saved_mic_index}")
-                        success = self.recorder.set_microphone(saved_mic_index)
-                        if success:
-                            print(f"🔥 CONFIG: Successfully restored microphone {saved_mic_index}")
-                        else:
-                            print(f"🚨 CONFIG: Failed to restore microphone {saved_mic_index}")
-                    
-                    # Load always on top setting
-                    loaded_always_on_top = config.get('always_on_top', True)
-                    if loaded_always_on_top != self.always_on_top:
-                        # Apply the loaded setting to update window flags
-                        self.toggle_always_on_top(loaded_always_on_top)
-                    if hasattr(self, 'always_on_top_checkbox'):
-                        self.always_on_top_checkbox.setChecked(self.always_on_top)
-                    
-                    # Load window opacity setting
-                    saved_opacity_percent = config.get('window_opacity', 95)
-                    # Handle old format (0.0-1.0) vs new format (0-100)
-                    if saved_opacity_percent <= 1.0:
-                        saved_opacity_percent = int(saved_opacity_percent * 100)
-                    
-                    self.current_opacity_percent = saved_opacity_percent
-                    self.update_window_alpha(saved_opacity_percent)
-                    print(f"🔥 CONFIG: Loaded window opacity: {saved_opacity_percent}%")
-                    
-                    # Load hotkey setting
-                    saved_hotkey = config.get('hotkey_combination', ["Ctrl", "Space"])
-                    self.current_hotkey = saved_hotkey
-                    self.hotkey_manager.set_hotkey(saved_hotkey)
-                    print(f"🔥 CONFIG: Loaded hotkey: {self.hotkey_manager.get_hotkey_string()}")
-                    
-                    # Load session management
-                    self.current_session = config.get('current_session', 'Default')
-                    self.current_session_history = config.get('current_session_history', [])
-                    self.saved_sessions = config.get('saved_sessions', [])
-                    print(f"🔥 CONFIG: Loaded session: {self.current_session} ({len(self.current_session_history)} entries)")
-                    
-                    # Load custom colors
-                    self.custom_bg_color = config.get('custom_bg_color', '#141414')
-                    self.custom_border_color = config.get('custom_border_color', '#4CAF50')
-                    self.custom_text_color = config.get('custom_text_color', '#ffffff')
-                    self.custom_button_color = config.get('custom_button_color', '#4CAF50')
-                    self.custom_translation_bg_color = config.get('custom_translation_bg_color', '#1a1a1a')
-                    self.custom_translation_text_color = config.get('custom_translation_text_color', '#ffffff')
-                    self.custom_history_bg_color = config.get('custom_history_bg_color', '#0f0f0f')
-                    self.custom_history_text_color = config.get('custom_history_text_color', '#cccccc')
-                    
-                    # Load font settings
-                    self.custom_translation_font_family = config.get('custom_translation_font_family', 'Arial')
-                    self.custom_translation_font_size = config.get('custom_translation_font_size', 14)
-                    self.custom_history_font_family = config.get('custom_history_font_family', 'Arial')
-                    self.custom_history_font_size = config.get('custom_history_font_size', 12)
-                    
-                    print(f"🔥 CONFIG: Loaded colors - BG: {self.custom_bg_color}, Border: {self.custom_border_color}, Text: {self.custom_text_color}, Button: {self.custom_button_color}")
-                    print(f"🔥 CONFIG: Loaded translation colors - BG: {self.custom_translation_bg_color}, Text: {self.custom_translation_text_color}")
-                    print(f"🔥 CONFIG: Loaded history colors - BG: {self.custom_history_bg_color}, Text: {self.custom_history_text_color}")
-                    print(f"🔥 CONFIG: Loaded fonts - Translation: {self.custom_translation_font_family} {self.custom_translation_font_size}px, History: {self.custom_history_font_family} {self.custom_history_font_size}px")
-                    
-                    # Apply custom colors to UI
-                    self.apply_custom_colors()
-                    
-                    for item in self.history:
-                        # Handle both old format (string) and new format (dict)
-                        if isinstance(item, str):
-                            # Old format - migrate to new format
-                            text = item
-                            session_name = "Legacy"
-                            item_dict = {'text': text, 'session': session_name, 'timestamp': ''}
-                            # Replace old string with new dict format
-                            item_idx = self.history.index(item)
-                            self.history[item_idx] = item_dict
-                        else:
-                            # New format
-                            text = item.get('text', '')
-                            session_name = item.get('session', 'Unknown')
-                        
-                        # Create clickable history item during load with session name
-                        item_btn = QPushButton(f"📝 [{session_name}] {text}")
-                        item_btn.setStyleSheet(self.get_themed_history_item_style())
-                        item_btn.clicked.connect(lambda checked, t=text: self.show_history_item(t))
-                        self.history_layout.addWidget(item_btn)
-                    
-                    # Update toggle button text after loading
-                    if hasattr(self, 'history_toggle'):
-                        self.history_toggle.setText(f"📜 History ({len(self.history)} items) ▼")
-        except:
-            pass
+                    if not isinstance(config, dict):
+                        raise ValueError("Backup config is not a dictionary")
+                    log.info("Successfully restored config from backup")
+                    return config
+            except json.JSONDecodeError as e:
+                log.error(f"Backup config also corrupted: {e}")
+            except Exception as e:
+                log.error(f"Error reading backup config: {e}")
+
+        return None
     
     def save_config(self):
+        """Save configuration with atomic writes and backup."""
         try:
-            print("🔥 Creating config directory...")
+            log.debug("Creating config directory...")
             self.config_path.parent.mkdir(parents=True, exist_ok=True)
-            print("🔥 Config directory created")
-            
-            print("🔥 Preparing config data...")
+            log.debug("Config directory created")
+
+            log.debug("Preparing config data...")
             config = {
                 'history': self.history[-50:],
                 'selected_microphone_index': self.recorder.current_microphone_index,
@@ -1526,14 +1569,46 @@ class DictatorWindow(QMainWindow):
                 'custom_history_font_family': getattr(self, 'custom_history_font_family', 'Arial'),
                 'custom_history_font_size': getattr(self, 'custom_history_font_size', 12)
             }
-            print(f"🔥 Config data prepared: {len(config['history'])} history items, mic index: {config['selected_microphone_index']}")
-            
-            print("🔥 Writing config file...")
-            with open(self.config_path, 'w') as f:
-                json.dump(config, f, indent=2)
-            print("🔥 Config file written successfully")
+
+            # Validate config is a dict
+            if not isinstance(config, dict):
+                raise ValueError("Config must be a dictionary")
+
+            log.debug(f"Config data prepared: {len(config['history'])} history items, mic index: {config['selected_microphone_index']}")
+
+            # Create backup before overwriting
+            if self.config_path.exists():
+                backup_path = self.config_path.with_suffix('.json.bak')
+                try:
+                    import shutil
+                    shutil.copy2(self.config_path, backup_path)
+                    log.debug(f"Created backup at {backup_path}")
+                except Exception as e:
+                    log.warning(f"Could not create backup: {e}")
+
+            # Atomic write: write to temp file, then rename
+            temp_path = self.config_path.with_suffix('.json.tmp')
+            try:
+                log.debug("Writing config to temp file...")
+                with open(temp_path, 'w') as f:
+                    json.dump(config, f, indent=2)
+
+                # Atomic rename
+                import os
+                os.replace(str(temp_path), str(self.config_path))
+                log.info("Config file saved successfully")
+            except Exception as e:
+                # Clean up temp file if it exists
+                if temp_path.exists():
+                    temp_path.unlink()
+                raise
+
+        except PermissionError as e:
+            log.error(f"Permission denied saving config: {e}")
+        except json.JSONEncodeError as e:
+            log.error(f"Error encoding config to JSON: {e}")
         except Exception as e:
-            print(f"🚨 Error saving config: {e}")
+            log.error(f"Error saving config: {e}")
             # Don't crash on config save errors
     
     # Compositor-aware window dragging
