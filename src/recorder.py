@@ -84,14 +84,14 @@ class PureRecorder:
         return str(model_dir)
     
     def load_whisper_model(self):
-        # Load synchronously with SSL bypass for network issues
+        """
+        Load Whisper model synchronously.
+        Uses secure SSL by default. If certificate issues occur, install
+        system certificates: sudo dnf install ca-certificates (or equivalent)
+        """
         try:
-            print("Loading Whisper model synchronously...")
-            
-            # Bypass SSL issues
-            import ssl
-            ssl._create_default_https_context = ssl._create_unverified_context
-            
+            log.info("Loading Whisper model synchronously")
+
             device = "cpu"
             model_path = self.get_whisper_model_path()
             print(f"Using model directory: {model_path}")
@@ -274,16 +274,12 @@ class PureRecorder:
         
         # If Whisper is available but model not loaded, load it now
         if not self.whisper_model:
-            print("🔧 Loading Whisper model...")
+            log.info("Loading Whisper model")
             try:
-                # Bypass SSL issues
-                import ssl
-                ssl._create_default_https_context = ssl._create_unverified_context
-                
                 from faster_whisper import WhisperModel
                 model_path = self.get_whisper_model_path()
                 self.whisper_model = WhisperModel(
-                    "tiny", 
+                    "tiny",
                     device="cpu",
                     download_root=model_path
                 )
