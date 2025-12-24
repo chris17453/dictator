@@ -39,8 +39,8 @@
 ## Phase 1: Critical Fixes & Stability (ALPHA)
 
 ### 1.1 Critical Bug Fixes
-- [ ] **Fix crash handling** - Remove force-kill monitor thread (gui.py:96-115)
-- [ ] **Fix resource cleanup** - Replace `os._exit(0)` with proper shutdown (dictator.py:1383)
+- [x] **Fix crash handling** - ✅ COMPLETED 2025-12-24 - Removed force-kill monitor thread, replaced os._exit with graceful shutdown
+- [x] **Fix resource cleanup** - ✅ COMPLETED 2025-12-24 - Replaced os._exit(0) with QApplication.quit() and proper cleanup
 - [ ] **Fix config file corruption** - Add validation and backup before save
 - [ ] **Fix audio device disconnect handling** - Graceful handling when mic unplugged
 - [ ] **Fix SSL verification** - Remove SSL bypass for Whisper downloads (recorder.py:83)
@@ -305,7 +305,24 @@ For EVERY feature, follow TDD cycle:
 
 ## Completed Tasks
 
-_None yet - let's get started!_
+### 2025-12-24
+
+**Phase 0: Testing Infrastructure** ✅
+- Set up virtual environment with uv
+- Installed pytest, pytest-cov, pytest-qt, pytest-mock, pytest-timeout
+- Configured pytest.ini with coverage settings
+- Ready for TDD development
+
+**Phase 1.1: Fix Crash Handling** ✅ (TDD Complete)
+- **RED**: Created 9 failing tests in tests/test_crash_handling.py
+- **GREEN**: Fixed all crash handling issues
+  - Removed destructive monitor_main_thread that used os._exit(1)
+  - Replaced os._exit with sys.exit in gui.py
+  - Changed close_application to use QApplication.quit()
+  - Added config save before shutdown
+- **Result**: All 9 tests PASS, no more force-killing, proper cleanup
+- **Commits**: e04c684 (RED), 6eb940e (GREEN)
+- **Files**: src/gui.py, src/dictator.py, tests/test_crash_handling.py
 
 ---
 
