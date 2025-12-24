@@ -18,7 +18,10 @@ import subprocess
 from pathlib import Path
 from PyQt6.QtWidgets import QApplication
 
-from logger import get_logger
+try:
+    from logger import get_logger
+except ImportError:
+    from .logger import get_logger
 log = get_logger(__name__)
 
 

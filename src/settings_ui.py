@@ -4,7 +4,10 @@ import json
 import os
 from pathlib import Path
 
-from logger import get_logger
+try:
+    from logger import get_logger
+except ImportError:
+    from .logger import get_logger
 log = get_logger(__name__)
 try:
     import importlib.resources as pkg_resources

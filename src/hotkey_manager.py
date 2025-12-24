@@ -4,7 +4,10 @@ Global hotkey management for Dictator
 """
 import os
 
-from logger import get_logger
+try:
+    from logger import get_logger
+except ImportError:
+    from .logger import get_logger
 log = get_logger(__name__)
 
 
