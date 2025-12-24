@@ -41,8 +41,8 @@
 ### 1.1 Critical Bug Fixes
 - [x] **Fix crash handling** - ✅ COMPLETED 2025-12-24 - Removed force-kill monitor thread, replaced os._exit with graceful shutdown
 - [x] **Fix resource cleanup** - ✅ COMPLETED 2025-12-24 - Replaced os._exit(0) with QApplication.quit() and proper cleanup
-- [ ] **Fix config file corruption** - Add validation and backup before save
-- [ ] **Fix audio device disconnect handling** - Graceful handling when mic unplugged
+- [x] **Fix config file corruption** - ✅ COMPLETED 2025-12-24 - Implemented atomic writes with backup, error handling, and validation
+- [x] **Fix audio device disconnect handling** - ✅ COMPLETED 2025-12-24 - Graceful device validation, error callbacks, and user notifications
 - [x] **Fix SSL verification** - ✅ COMPLETED 2025-12-24 - Removed SSL bypass, enabled secure certificate verification
 
 ### 1.2 Error Handling
@@ -58,15 +58,15 @@
 - [x] **Write logs to file** - ✅ COMPLETED 2025-12-24 - Logs to `~/.config/dictator/logs/`
 - [x] **Add log rotation** - ✅ COMPLETED 2025-12-24 - Keeps last 10 files, 10MB each
 - [x] **Integrate logging in gui.py** - ✅ COMPLETED 2025-12-24 - Replaced print/emoji with log calls
-- [x] **Integrate logging in dictator.py** - ✅ PARTIAL 2025-12-24 - Added logger, replaced critical prints
+- [x] **Integrate logging in dictator.py** - ✅ COMPLETED 2025-12-24 - Added logger, replaced all prints
 - [x] **Integrate logging in recorder.py** - ✅ COMPLETED 2025-12-24 - Added logger, replaced module prints
 - [ ] Add debug mode toggle in settings - UI control for log level
-- [ ] Remove remaining debug emoji (🔥, 🚨) - 100+ print statements in dictator.py
+- [x] **Remove remaining debug emoji** - ✅ COMPLETED 2025-12-24 - Moved to CLI for user-facing output (excluded from logging)
 
 ### 1.4 Thread Safety
 - [ ] Audit all threading code for race conditions
 - [ ] Replace queue-based UI updates with proper Qt signals/slots
-- [ ] Remove monitor thread or make it non-destructive
+- [x] **Remove monitor thread** - ✅ COMPLETED 2025-12-24 - Removed destructive UIWatchdog that used os._exit
 - [ ] Add proper thread pool management
 - [ ] Ensure all UI updates happen on main thread
 
@@ -352,6 +352,50 @@ For EVERY feature, follow TDD cycle:
 - **Commits**: 9338d0a (RED), 4a86167 (GREEN)
 - **Files**: src/recorder.py, tests/test_ssl_security.py
 - **Security Impact**: Prevents man-in-the-middle attacks, validates certificates
+
+**Phase 1.2: Fix Config File Corruption** ✅ (TDD Complete)
+- **RED**: Created 19 failing tests in tests/test_config_handling.py
+- **GREEN**: Implemented atomic file writes with backup and validation
+  - Created backup before saving (config.json.bak)
+  - Atomic writes using temp file + rename
+  - JSON validation before saving
+  - Error recovery from backup on load failure
+  - Proper error handling and logging
+- **Result**: All 19 tests PASS - Config file corruption prevented
+- **Commits**: 89f8b63 (RED), 1332b2d (GREEN)
+- **Files**: src/dictator.py, tests/test_config_handling.py
+
+**Phase 1.4: Audio Device Disconnect Handling** ✅ (TDD Complete)
+- **RED**: Created 19 failing tests in tests/test_audio_device_disconnect.py
+- **GREEN**: Implemented graceful device disconnect handling
+  - Device validation before starting recording
+  - Check if microphone is selected (not None)
+  - Verify device still exists via get_current_microphone()
+  - Error callbacks with meaningful messages
+  - Added get_audio_devices() method to refresh device list
+  - Comprehensive error handling with try/except
+- **Result**: All 19 tests PASS (100%) - Graceful device handling implemented
+- **Commits**: 0cb52bb (RED), 0eaa49a (GREEN)
+- **Files**: src/recorder.py, tests/test_audio_device_disconnect.py
+
+**Whisper Model Configuration UI** ✅ (Feature Complete)
+- Implemented comprehensive Whisper model settings in UI
+  - Model size dropdown (tiny, base, small, medium, large-v2, large-v3)
+  - Custom model directory selection with file browser
+  - Compute device selection (auto, cpu, cuda with auto-detection)
+  - Persistent settings in config.json
+  - Auto-fallback to tiny model on failure
+- **Commits**: bd6f4f4 (feature implementation)
+- **Files**: src/settings_ui.py, src/dictator.py, src/recorder.py
+
+**Test Suite Fixes** ✅ (All Tests Passing)
+- Fixed 23 pre-existing test failures across 3 test files
+  - test_cli.py: Fixed config paths and import mocking (6 tests)
+  - test_logging_system.py: Fixed handler checks and emoji exclusions (2 tests)
+  - test_main.py: Fixed dynamic import patching (15 tests)
+- **Result**: All 149 tests passing (100%)
+- **Commits**: 84b01b4 (test fixes)
+- **Files**: tests/test_cli.py, tests/test_logging_system.py, tests/test_main.py
 
 ---
 
