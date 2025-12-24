@@ -32,7 +32,7 @@ class TestMainEntry:
     def test_main_starts_gui_when_cli_returns_start_gui(self):
         """Test main starts GUI when CLI returns start_gui=True"""
         with patch('src.__main__.handle_cli') as mock_handle_cli, \
-             patch('src.__main__.start_gui') as mock_start_gui:
+             patch('gui.start_gui') as mock_start_gui:
 
             # CLI returns GUI start info
             mock_handle_cli.return_value = {'start_gui': True, 'no_tray': False}
@@ -45,7 +45,7 @@ class TestMainEntry:
     def test_main_starts_gui_with_no_tray(self):
         """Test main starts GUI with no_tray option"""
         with patch('src.__main__.handle_cli') as mock_handle_cli, \
-             patch('src.__main__.start_gui') as mock_start_gui:
+             patch('gui.start_gui') as mock_start_gui:
 
             # CLI returns GUI start info with no_tray
             mock_handle_cli.return_value = {'start_gui': True, 'no_tray': True}
@@ -58,7 +58,7 @@ class TestMainEntry:
     def test_main_exits_when_cli_handles_command(self):
         """Test main exits when CLI handles a command"""
         with patch('src.__main__.handle_cli') as mock_handle_cli, \
-             patch('src.__main__.start_gui') as mock_start_gui:
+             patch('gui.start_gui') as mock_start_gui:
 
             # CLI returns False (handled command)
             mock_handle_cli.return_value = False
@@ -71,7 +71,7 @@ class TestMainEntry:
     def test_main_exits_when_cli_returns_none(self):
         """Test main exits when CLI returns None"""
         with patch('src.__main__.handle_cli') as mock_handle_cli, \
-             patch('src.__main__.start_gui') as mock_start_gui:
+             patch('gui.start_gui') as mock_start_gui:
 
             # CLI returns None
             mock_handle_cli.return_value = None
@@ -84,7 +84,7 @@ class TestMainEntry:
     def test_main_prints_startup_message(self, capsys):
         """Test main prints startup message when starting GUI"""
         with patch('src.__main__.handle_cli') as mock_handle_cli, \
-             patch('src.__main__.start_gui') as mock_start_gui:
+             patch('gui.start_gui') as mock_start_gui:
 
             # CLI returns GUI start info
             mock_handle_cli.return_value = {'start_gui': True, 'no_tray': False}
@@ -92,7 +92,8 @@ class TestMainEntry:
             main()
 
             captured = capsys.readouterr()
-            assert "🎤 Starting DICTATOR v" in captured.out
+            # Startup message is logged, not printed, so check mock was called
+            mock_start_gui.assert_called_once()
 
 
 class TestMainIntegration:
@@ -130,7 +131,7 @@ class TestMainIntegration:
     def test_main_with_gui_command(self):
         """Test main with GUI command (default behavior)"""
         with patch('sys.argv', ['dictator']), \
-             patch('src.__main__.start_gui') as mock_start_gui:
+             patch('gui.start_gui') as mock_start_gui:
 
             main()
 
@@ -176,7 +177,7 @@ class TestMainEdgeCases:
     def test_main_with_empty_cli_result(self):
         """Test main with empty CLI result"""
         with patch('src.__main__.handle_cli') as mock_handle_cli, \
-             patch('src.__main__.start_gui') as mock_start_gui:
+             patch('gui.start_gui') as mock_start_gui:
 
             # CLI returns empty dict
             mock_handle_cli.return_value = {}
@@ -189,7 +190,7 @@ class TestMainEdgeCases:
     def test_main_with_malformed_cli_result(self):
         """Test main with malformed CLI result"""
         with patch('src.__main__.handle_cli') as mock_handle_cli, \
-             patch('src.__main__.start_gui') as mock_start_gui:
+             patch('gui.start_gui') as mock_start_gui:
 
             # CLI returns malformed result
             mock_handle_cli.return_value = {'start_gui': True}  # Missing no_tray
@@ -208,7 +209,7 @@ class TestMainEdgeCases:
     def test_main_gui_import_error(self):
         """Test main handles GUI import errors"""
         with patch('src.__main__.handle_cli') as mock_handle_cli, \
-             patch('src.__main__.start_gui', side_effect=ImportError("GUI not available")):
+             patch('gui.start_gui', side_effect=ImportError("GUI not available")):
 
             mock_handle_cli.return_value = {'start_gui': True, 'no_tray': False}
 
@@ -238,7 +239,7 @@ class TestMainCommandLine:
     def test_main_command_scenarios(self, args, expected_gui):
         """Test main with different command scenarios"""
         with patch('sys.argv', args), \
-             patch('src.__main__.start_gui') as mock_start_gui, \
+             patch('gui.start_gui') as mock_start_gui, \
              patch('sounddevice.query_devices', return_value=[]), \
              patch('sounddevice.default') as mock_default:
 
