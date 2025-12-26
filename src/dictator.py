@@ -72,7 +72,12 @@ class DictatorWindow(QMainWindow):
         self.recording_timeout = 300  # Default: 5 minutes (300 seconds)
         self.hotkey_manager = HotkeyManager(self.current_hotkey)
         self.history = []
-        
+
+        # Audio quality monitoring
+        self.audio_quality_state = 'good'  # 'good', 'too_quiet', or 'too_loud'
+        self.audio_too_quiet_threshold = 10  # Below 10% is too quiet
+        self.audio_too_loud_threshold = 90  # Above 90% risks clipping
+
         # Session management
         self.current_session = "Default"
         self.current_session_history = []
@@ -443,8 +448,25 @@ class DictatorWindow(QMainWindow):
         self.volume_timer = QTimer()
         self.volume_timer.timeout.connect(self.update_volume_bars)
         log.debug(" VOLUME: Volume timer created but not started (will start during recording)")
-        
-        
+
+        # Audio quality warning label
+        self.quality_warning_label = QLabel()
+        self.quality_warning_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.quality_warning_label.setStyleSheet("""
+            QLabel {
+                background-color: rgba(255, 152, 0, 200);
+                color: white;
+                border: 2px solid rgba(255, 152, 0, 255);
+                border-radius: 8px;
+                padding: 8px 12px;
+                font-size: 13px;
+                font-weight: bold;
+                margin: 4px 0;
+            }
+        """)
+        self.quality_warning_label.hide()  # Hidden by default
+        top_layout.addWidget(self.quality_warning_label)
+
         # Current transcription text area
         current_label = QLabel("Current Transcription:")
         current_label.setStyleSheet("color: #4CAF50; font-size: 12px; font-weight: bold; margin-top: 8px;")
@@ -1059,6 +1081,10 @@ class DictatorWindow(QMainWindow):
             # Hide pause button when stopping
             self.pause_btn.hide()
 
+            # Reset audio quality state and hide warning
+            self.audio_quality_state = 'good'
+            self.quality_warning_label.hide()
+
         except Exception as e:
             log.error(f"FATAL ERROR in stop_recording: {e}")
             import traceback
@@ -1418,7 +1444,47 @@ class DictatorWindow(QMainWindow):
                         }}
                     """)
                     bar.is_on = False
-    
+
+            # Check audio quality while recording
+            self.check_audio_quality()
+
+    def check_audio_quality(self):
+        """Check current audio level and update quality state."""
+        if not self.recorder.is_recording:
+            return
+
+        with self.recorder.audio_level_lock:
+            audio_level = self.recorder.current_audio_level
+
+        # Determine quality state based on thresholds
+        if audio_level < self.audio_too_quiet_threshold:
+            new_state = 'too_quiet'
+        elif audio_level > self.audio_too_loud_threshold:
+            new_state = 'too_loud'
+        else:
+            new_state = 'good'
+
+        # Update state if changed
+        if new_state != self.audio_quality_state:
+            self.audio_quality_state = new_state
+            self.update_quality_warning()
+
+    def update_quality_warning(self):
+        """Update quality warning label based on current state."""
+        if not self.recorder.is_recording:
+            # Hide warning when not recording
+            self.quality_warning_label.hide()
+            return
+
+        if self.audio_quality_state == 'too_quiet':
+            self.quality_warning_label.setText("⚠ Audio too quiet - Speak louder or move closer to microphone")
+            self.quality_warning_label.show()
+        elif self.audio_quality_state == 'too_loud':
+            self.quality_warning_label.setText("⚠ Audio too loud - Lower volume or move away from microphone (risk of clipping)")
+            self.quality_warning_label.show()
+        else:  # good
+            self.quality_warning_label.hide()
+
     def toggle_history(self):
         self.history_collapsed = not self.history_collapsed
         
