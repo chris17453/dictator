@@ -9,6 +9,7 @@ import tempfile
 import time
 import subprocess
 import numpy as np
+import queue
 from pathlib import Path
 
 # Import logger
@@ -46,7 +47,7 @@ class PureRecorder:
         self.sample_rate = 44100
         self.chunk_size = 1024
         self.supported_rates = [44100, 22050, 16000, 8000]
-        
+
         # WHISPER ONLY - no Google Speech Recognition
         self.whisper_model = None
         self.whisper_model_name = "tiny"
@@ -56,18 +57,24 @@ class PureRecorder:
         self.whisper_model_size = "tiny"
         self.whisper_model_dir = None  # Will use default if None
         self.whisper_device = "auto"
-        
+
+        # Thread safety locks
+        self.audio_level_lock = threading.Lock()  # Protects audio_data and current_audio_level
+        self.monitoring_lock = threading.Lock()  # Protects is_monitoring flag
+        self.model_loading_lock = threading.Lock()  # Protects whisper_model loading
+        self.subprocess_lock = threading.Lock()  # Protects active_subprocess
+        self.recording_lock = threading.Lock()  # Protects recording state
+
         # Subprocess tracking for cleanup
         self.active_subprocess = None
-        
+
         # Audio level monitoring
         self.current_audio_level = 0
-        self.audio_level_lock = threading.Lock()
         self.is_monitoring = False
-        self.audio_queue = []
-        
+        self.audio_queue = queue.Queue(maxsize=1000)  # Thread-safe bounded queue
+
         self.refresh_microphones()
-        
+
         log.debug(f"WHISPER_AVAILABLE at init: {WHISPER_AVAILABLE}")
         if WHISPER_AVAILABLE:
             log.debug("Calling load_whisper_model...")
@@ -76,7 +83,7 @@ class PureRecorder:
         else:
             log.debug("WHISPER_AVAILABLE is False!")
             self.whisper_model = None
-        
+
         # Initialize audio variables (keep it simple)
         self.audio_data = []
     
@@ -299,13 +306,20 @@ class PureRecorder:
     
     def start_continuous_monitoring(self):
         """Start continuous audio monitoring like SAI"""
-        if not SOUNDDEVICE_AVAILABLE or self.is_monitoring:
+        if not SOUNDDEVICE_AVAILABLE:
             return
-        
-        # Ensure any previous monitoring is stopped first
-        self.stop_monitoring()
-        
-        self.is_monitoring = True
+
+        # Use lock to prevent race condition
+        with self.monitoring_lock:
+            if self.is_monitoring:
+                return
+
+            # Ensure any previous monitoring is stopped first
+            self.stop_monitoring()
+
+            self.is_monitoring = True
+
+        # Start thread outside lock to avoid deadlock
         self.monitoring_thread = threading.Thread(target=self._continuous_monitor_worker, daemon=True)
         self.monitoring_thread.start()
     
@@ -324,9 +338,11 @@ class PureRecorder:
     
     def stop_monitoring(self):
         """Stop continuous monitoring"""
-        if hasattr(self, 'is_monitoring'):
-            self.is_monitoring = False
-        
+        # Use lock to safely update flag
+        with self.monitoring_lock:
+            if hasattr(self, 'is_monitoring'):
+                self.is_monitoring = False
+
         # Wait for thread to finish to avoid memory issues
         if hasattr(self, 'monitoring_thread') and self.monitoring_thread.is_alive():
             self.monitoring_thread.join(timeout=1.0)
@@ -337,22 +353,24 @@ class PureRecorder:
         log.debug(f"self.whisper_model: {self.whisper_model}")
         
         # If Whisper is available but model not loaded, load it now
-        if not self.whisper_model:
-            log.info("Loading Whisper model")
-            try:
-                from faster_whisper import WhisperModel
-                model_path = self.get_whisper_model_path()
-                self.whisper_model = WhisperModel(
-                    "tiny",
-                    device="cpu",
-                    download_root=model_path
-                )
-                log.info(" Whisper tiny model loaded successfully")
-                log.debug(f"Model stored in: {model_path}")
-            except Exception as e:
-                log.error(f"FATAL: Failed to load Whisper model: {e}")
-                self.callback("ERROR: Whisper failed to load", "error")
-                return
+        # Use lock to prevent concurrent loading
+        with self.model_loading_lock:
+            if not self.whisper_model:
+                log.info("Loading Whisper model")
+                try:
+                    from faster_whisper import WhisperModel
+                    model_path = self.get_whisper_model_path()
+                    self.whisper_model = WhisperModel(
+                        "tiny",
+                        device="cpu",
+                        download_root=model_path
+                    )
+                    log.info(" Whisper tiny model loaded successfully")
+                    log.debug(f"Model stored in: {model_path}")
+                except Exception as e:
+                    log.error(f"FATAL: Failed to load Whisper model: {e}")
+                    self.callback("ERROR: Whisper failed to load", "error")
+                    return
         
         # ONLY USE WHISPER - NO GOOGLE
         log.debug("🎵 Using Whisper for transcription")
