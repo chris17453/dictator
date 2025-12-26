@@ -66,6 +66,10 @@ class DictatorWindow(QMainWindow):
         super().__init__()
         log.info("Initializing DICTATOR window")
         self.recorder = PureRecorder(thread_pool=thread_pool)
+
+        # Set up progress callback for transcription
+        self.recorder.progress_callback = self.update_transcription_progress
+
         # Load hotkey from config or use default
         self.current_hotkey = ["Ctrl", "Space"]  # Default
         self.recording_mode = "toggle"  # Default: toggle mode for backwards compatibility
@@ -698,6 +702,49 @@ class DictatorWindow(QMainWindow):
         """)
         self.quality_warning_label.hide()  # Hidden by default
         top_layout.addWidget(self.quality_warning_label)
+
+        # Transcription progress indicator
+        self.progress_label = QLabel("Processing...")
+        self.progress_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.progress_label.setStyleSheet("""
+            QLabel {
+                color: rgba(80, 220, 240, 255);
+                font-size: 12px;
+                font-weight: bold;
+                margin: 4px 0;
+            }
+        """)
+        self.progress_label.hide()  # Hidden by default
+        top_layout.addWidget(self.progress_label)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(20, 30, 45, 160),
+                    stop:1 rgba(15, 25, 40, 180));
+                border: 2px solid rgba(100, 200, 240, 100);
+                border-radius: 8px;
+                text-align: center;
+                color: rgba(240, 250, 255, 255);
+                font-size: 11px;
+                font-weight: bold;
+                height: 24px;
+                margin: 4px 0;
+            }
+            QProgressBar::chunk {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(60, 180, 220, 200),
+                    stop:0.5 rgba(80, 200, 240, 220),
+                    stop:1 rgba(100, 220, 255, 200));
+                border-radius: 6px;
+            }
+        """)
+        self.progress_bar.hide()  # Hidden by default
+        top_layout.addWidget(self.progress_bar)
 
         # Current transcription text area
         current_label = QLabel("Current Transcription:")
@@ -1442,6 +1489,36 @@ class DictatorWindow(QMainWindow):
         self.status_label.setStyleSheet("color: #2196F3; font-size: 13px;")
         QApplication.processEvents()
 
+    def show_transcription_progress(self):
+        """Show progress bar and label when transcription starts."""
+        log.debug("PROGRESS: Showing transcription progress")
+        self.progress_bar.setValue(0)
+        self.progress_bar.show()
+        self.progress_label.show()
+        QApplication.processEvents()
+
+    def hide_transcription_progress(self):
+        """Hide progress bar and label when transcription completes."""
+        log.debug("PROGRESS: Hiding transcription progress")
+        self.progress_bar.hide()
+        self.progress_label.hide()
+        QApplication.processEvents()
+
+    def update_transcription_progress(self, percent, message="Processing..."):
+        """Update transcription progress bar and label.
+
+        Args:
+            percent: Progress percentage (0-100)
+            message: Status message to display
+        """
+        # Clamp percent to valid range
+        percent = max(0, min(100, percent))
+
+        log.debug(f"PROGRESS: {percent}% - {message}")
+        self.progress_bar.setValue(percent)
+        self.progress_label.setText(message)
+        QApplication.processEvents()
+
     def process_preview_audio(self):
         """Legacy method for compatibility - delegates to internal method."""
         if self.recorder.preview_audio_data is None:
@@ -1471,6 +1548,7 @@ class DictatorWindow(QMainWindow):
         # Show transcription in progress
         self.status_label.setText("🔄 Transcribing...")
         self.status_label.setStyleSheet("color: #FF9800; font-size: 13px;")
+        self.show_transcription_progress()  # Show progress bar
         QApplication.processEvents()
 
         # Transcribe in background thread
@@ -1516,6 +1594,9 @@ class DictatorWindow(QMainWindow):
     def _safe_handle_transcription(self, text, language):
         """Safe transcription handler that runs on main thread"""
         log.debug(f"SAFE_HANDLE_TRANSCRIPTION: '{text}' (language: {language})")
+
+        # Hide progress bar (transcription complete)
+        self.hide_transcription_progress()
 
         # Handle preview_ready status - show preview controls instead of transcribing
         if language == "preview_ready":

@@ -55,6 +55,9 @@ class PureRecorder:
         self.supported_rates = [44100, 22050, 16000, 8000]
         self.max_recording_duration = 300  # Default: 5 minutes
 
+        # Progress callback for transcription
+        self.progress_callback = None  # Called with (percent, message) during transcription
+
         # Thread pool for short-lived tasks (recording workers)
         self.thread_pool = thread_pool
 
@@ -432,12 +435,21 @@ class PureRecorder:
                 return
 
             log.info("TRANSCRIBE: Processing preview audio with Whisper...")
+
+            # Progress: Starting
+            if self.progress_callback:
+                self.progress_callback(10, "Loading model...")
+
             audio_array = self.preview_audio_data
             working_rate = self.preview_sample_rate
 
             # Process with Whisper
             log.debug("Processing audio with Whisper...")
             audio_float = audio_array.astype(np.float32) / 32768.0
+
+            # Progress: Preparing audio
+            if self.progress_callback:
+                self.progress_callback(30, "Preparing audio...")
 
             # Resample to 16kHz if needed (Whisper's expected rate)
             if working_rate != 16000:
@@ -463,11 +475,19 @@ class PureRecorder:
                 log.info(" WHISPER: Starting transcription with faster-whisper...")
                 log.debug(f"WHISPER: Audio length: {len(audio_float)} samples")
 
+                # Progress: Processing audio
+                if self.progress_callback:
+                    self.progress_callback(50, "Processing audio...")
+
                 # Determine language parameter (None for auto-detect)
                 language_param = None if self.whisper_language == 'auto' else self.whisper_language
                 log.debug(f"WHISPER: Using language: {self.whisper_language} (param: {language_param})")
 
                 segments, info = self.whisper_model.transcribe(audio_float, language=language_param)
+
+                # Progress: Finalizing
+                if self.progress_callback:
+                    self.progress_callback(90, "Finalizing transcription...")
 
                 # Collect all segments
                 transcription = ""
@@ -476,6 +496,10 @@ class PureRecorder:
 
                 transcription = transcription.strip()
                 log.info(f" WHISPER: Transcription completed: '{transcription[:50]}...'")
+
+                # Progress: Complete
+                if self.progress_callback:
+                    self.progress_callback(100, "Complete!")
 
                 if callback:
                     callback(transcription, "success")
