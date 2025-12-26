@@ -159,7 +159,12 @@ class DictatorWindow(QMainWindow):
         msg_box.setWindowTitle(title)
         msg_box.setText(message)
         msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
-        msg_box.exec()
+
+        # Use non-blocking show() in tests to prevent blocking
+        if 'pytest' in sys.modules:
+            msg_box.show()  # Non-blocking for tests
+        else:
+            msg_box.exec()  # Blocking modal dialog for production
 
     def init_ui(self):
         self.setWindowTitle(f"DICTATOR v{__version__}")
