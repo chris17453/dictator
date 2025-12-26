@@ -60,7 +60,7 @@
 - [x] **Integrate logging in gui.py** - ✅ COMPLETED 2025-12-24 - Replaced print/emoji with log calls
 - [x] **Integrate logging in dictator.py** - ✅ COMPLETED 2025-12-24 - Added logger, replaced all prints
 - [x] **Integrate logging in recorder.py** - ✅ COMPLETED 2025-12-24 - Added logger, replaced module prints
-- [ ] Add debug mode toggle in settings - UI control for log level
+- [x] **Add debug mode toggle in settings** - ✅ COMPLETED 2025-12-26 - Advanced tab with debug checkbox, toggles DEBUG/INFO log level (20 tests)
 - [x] **Remove remaining debug emoji** - ✅ COMPLETED 2025-12-24 - Moved to CLI for user-facing output (excluded from logging)
 
 ### 1.4 Thread Safety
@@ -410,6 +410,33 @@ For EVERY feature, follow TDD cycle:
 - **Commits**: 9b0d2ec (RED), 9a5102b (GREEN)
 - **Files**: src/dictator.py, tests/test_error_dialogs.py
 - **User Impact**: Users now get clear, actionable error messages instead of silent failures
+
+**Whisper Model Download UI** ✅ (TDD Complete)
+- **RED**: Created 20 comprehensive tests in tests/test_whisper_model_download.py
+- **GREEN**: Implemented model download button in settings
+  - Added download button, progress bar, and status label
+  - Background threading prevents UI freeze during download
+  - Success/error handlers with user-friendly messages
+  - Download uses selected model size and directory
+  - Proper error handling for network, disk, permission errors
+- **Result**: All 20 tests PASS (100%) - 189 total tests passing
+- **Commits**: 8cf1ebd (RED), fe93b70 (GREEN)
+- **Files**: src/settings_ui.py, tests/test_whisper_model_download.py
+- **User Impact**: Users can now download models directly through the UI
+
+**Phase 1.3: Debug Mode Toggle** ✅ (TDD Complete)
+- **RED**: Created 20 comprehensive tests in tests/test_debug_mode_toggle.py
+- **GREEN**: Implemented debug mode toggle in settings
+  - Added Advanced tab in settings dialog
+  - Debug mode checkbox with clear label and tooltip
+  - toggle_debug_mode() handler sets log level to DEBUG or INFO
+  - Config persistence (saves/loads debug_mode_enabled)
+  - Defaults to False (INFO level) for normal users
+  - Log level applied on config load at startup
+- **Result**: All 20 tests PASS (100%) - 207 total tests passing
+- **Commits**: 44422d2 (feature implementation)
+- **Files**: src/settings_ui.py, src/dictator.py, tests/test_debug_mode_toggle.py
+- **User Impact**: Users can now enable verbose debug logging for troubleshooting
 
 ---
 
