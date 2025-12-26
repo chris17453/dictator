@@ -73,14 +73,14 @@
 
 ---
 
-**🎉 PHASE 1 COMPLETE! All critical fixes and stability improvements done. 342 tests passing.**
+**🎉 PHASE 1 COMPLETE! All critical fixes and stability improvements done. 360 tests passing.**
 
 ---
 
 ## Phase 2: Core Features & UX (BETA)
 
 ### 2.1 Recording & Input
-- [ ] **Add push-to-talk mode** - Hold key to record, release to stop
+- [x] **Add push-to-talk mode** - ✅ COMPLETED 2025-12-26 - Toggle vs push-to-talk modes with UI selector in settings (18 tests)
 - [ ] **Add pause/resume** - Pause during recording without stopping
 - [ ] **Add recording timeout settings** - User configurable max recording time
 - [ ] **Add silence detection settings** - Configurable VAD sensitivity

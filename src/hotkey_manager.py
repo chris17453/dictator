@@ -141,17 +141,18 @@ class HotkeyManager:
     def _on_key_press(self, key):
         try:
             self.pressed_keys.add(key)
-            
+
             # Mark that we detected a key (for permission testing)
             if hasattr(self, 'test_key_detected'):
                 self.test_key_detected = True
-            
+
             if self._is_hotkey_pressed() and not self.hotkey_active:
                 self.hotkey_active = True
                 log.debug(f"HOTKEY: Activated - {self.get_hotkey_string()}")
                 if self.callback:
                     try:
-                        self.callback()
+                        # Pass is_press=True to indicate this is a key press event
+                        self.callback(is_press=True)
                         self.last_callback_success = True
                     except Exception as e:
                         log.error(f"Callback failed: {e}")
@@ -165,14 +166,15 @@ class HotkeyManager:
     def _on_key_release(self, key):
         try:
             self.pressed_keys.discard(key)
-            
+
             # Deactivate when any required key is released
             if self.hotkey_active and key in self.required_keys:
                 self.hotkey_active = False
                 log.debug(f"HOTKEY: Deactivated")
                 if self.callback:
                     try:
-                        self.callback()
+                        # Pass is_press=False to indicate this is a key release event
+                        self.callback(is_press=False)
                         self.last_callback_success = True
                     except Exception as e:
                         log.error(f"Callback failed on release: {e}")

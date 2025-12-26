@@ -68,6 +68,7 @@ class DictatorWindow(QMainWindow):
         self.recorder = PureRecorder(thread_pool=thread_pool)
         # Load hotkey from config or use default
         self.current_hotkey = ["Ctrl", "Space"]  # Default
+        self.recording_mode = "toggle"  # Default: toggle mode for backwards compatibility
         self.hotkey_manager = HotkeyManager(self.current_hotkey)
         self.history = []
         
@@ -874,10 +875,34 @@ class DictatorWindow(QMainWindow):
     
     
     
-    def toggle_recording(self):
-        log.debug(" HOTKEY: toggle_recording called from hotkey")
-        # Emit signal to toggle recording on main thread (thread-safe)
-        self.toggleRecording.emit()
+    def toggle_recording(self, is_press=True):
+        """Legacy toggle recording method - now delegates to hotkey_pressed"""
+        log.debug(f" HOTKEY: toggle_recording called (is_press={is_press})")
+        self.hotkey_pressed(is_press=is_press)
+
+    def hotkey_pressed(self, is_press=True):
+        """Handle hotkey press/release based on current recording mode"""
+        log.debug(f" HOTKEY: hotkey_pressed called (mode={self.recording_mode}, is_press={is_press})")
+
+        if self.recording_mode == "push-to-talk":
+            # Push-to-talk mode: start on press, stop on release
+            if is_press:
+                log.debug(" PUSH-TO-TALK: Key pressed - starting recording")
+                # Only start if not already recording
+                if not self.recorder.is_recording:
+                    self.toggleRecording.emit()
+            else:
+                log.debug(" PUSH-TO-TALK: Key released - stopping recording")
+                # Only stop if currently recording
+                if self.recorder.is_recording:
+                    self.toggleRecording.emit()
+        else:
+            # Toggle mode: only respond to key press, ignore release
+            if is_press:
+                log.debug(" TOGGLE: Key pressed - toggling recording")
+                self.toggleRecording.emit()
+            else:
+                log.debug(" TOGGLE: Key released - ignoring (toggle mode)")
     
     def toggle_manual_recording(self):
         log.debug(" BUTTON_CLICK: Manual recording button clicked")
@@ -1394,12 +1419,25 @@ class DictatorWindow(QMainWindow):
     def update_status_label(self, text):
         self.status_label.setText(text)
 
+    def get_mode_description(self, mode):
+        """Get user-friendly description of recording mode."""
+        if mode == "push-to-talk":
+            return "Hold key to record, release to stop"
+        else:
+            return "Press key to toggle recording on/off"
+
     def get_shortcuts_list(self):
         """Get list of keyboard shortcuts with descriptions."""
         hotkey_str = "+".join(self.current_hotkey)
 
+        # Recording action description depends on mode
+        if self.recording_mode == "push-to-talk":
+            recording_desc = "Hold to record, release to stop"
+        else:
+            recording_desc = "Start/stop recording (toggle listening)"
+
         shortcuts = {
-            hotkey_str: "Start/stop recording (toggle listening)",
+            hotkey_str: recording_desc,
             "Click 🎤 button": "Start/stop recording (alternative)",
             "Click ⚙ button": "Open settings",
             "Click ? button": "Show this help",
@@ -1547,6 +1585,10 @@ class DictatorWindow(QMainWindow):
                 self.hotkey_manager.set_hotkey(saved_hotkey)
                 log.debug(f"CONFIG: Loaded hotkey: {self.hotkey_manager.get_hotkey_string()}")
 
+                # Load recording mode setting
+                self.recording_mode = config.get('recording_mode', 'toggle')
+                log.debug(f"CONFIG: Loaded recording mode: {self.recording_mode}")
+
                 # Load session management
                 self.current_session = config.get('current_session', 'Default')
                 self.current_session_history = config.get('current_session_history', [])
@@ -1690,6 +1732,7 @@ class DictatorWindow(QMainWindow):
                 'always_on_top': self.always_on_top,
                 'window_opacity': self.current_opacity_percent,
                 'hotkey_combination': self.current_hotkey,
+                'recording_mode': getattr(self, 'recording_mode', 'toggle'),
                 'current_session': self.current_session,
                 'current_session_history': self.current_session_history,
                 'saved_sessions': self.saved_sessions,

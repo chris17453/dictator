@@ -599,8 +599,16 @@ class SettingsDialog(QDialog):
         hotkey_row.addWidget(change_hotkey_btn)
         
         hotkey_layout.addRow("Record Toggle:", hotkey_row)
+
+        # Recording mode selector
+        self.recording_mode_combo = QComboBox()
+        self.recording_mode_combo.addItem("Toggle Mode", "toggle")
+        self.recording_mode_combo.addItem("Push-to-Talk Mode", "push-to-talk")
+        self.recording_mode_combo.setToolTip("Toggle: Press key to start/stop. Push-to-talk: Hold key to record, release to stop")
+        hotkey_layout.addRow("Recording Mode:", self.recording_mode_combo)
+
         hotkeys_layout.addWidget(hotkey_group)
-        
+
         tabs.addTab(hotkeys_tab, "Hotkeys")
         
         # History management tab
@@ -753,6 +761,14 @@ class SettingsDialog(QDialog):
         if hasattr(self.parent_window, 'hotkey_manager'):
             current_hotkey_string = self.parent_window.hotkey_manager.get_hotkey_string()
             self.hotkey_label.setText(current_hotkey_string)
+
+        # Load recording mode
+        if hasattr(self.parent_window, 'recording_mode'):
+            mode = self.parent_window.recording_mode
+            for i in range(self.recording_mode_combo.count()):
+                if self.recording_mode_combo.itemData(i) == mode:
+                    self.recording_mode_combo.setCurrentIndex(i)
+                    break
 
         # Load debug mode setting
         if hasattr(self.parent_window, 'debug_mode_enabled'):
@@ -1736,8 +1752,8 @@ class SettingsDialog(QDialog):
         if self.parent_window:
             self.parent_window.debug_mode_enabled = debug_enabled
 
-    def accept_settings(self):
-        """Apply settings and close dialog"""
+    def apply_settings(self):
+        """Apply settings without closing dialog"""
         if not self.parent_window:
             return
             
@@ -1768,7 +1784,14 @@ class SettingsDialog(QDialog):
         if hasattr(self, 'opacity_slider'):
             opacity_value = self.opacity_slider.value()
             self.parent_window.update_window_alpha(opacity_value)
-        
+
+        # Apply recording mode
+        if hasattr(self, 'recording_mode_combo'):
+            selected_mode = self.recording_mode_combo.currentData()
+            if selected_mode:
+                self.parent_window.recording_mode = selected_mode
+                log.info(f"SETTINGS: Applied recording mode: {selected_mode}")
+
         # Apply Whisper model settings
         self.save_whisper_settings()
 
@@ -1776,5 +1799,8 @@ class SettingsDialog(QDialog):
         self.parent_window.apply_custom_colors()
         self.parent_window.save_config()
 
+    def accept_settings(self):
+        """Apply settings and close dialog"""
+        self.apply_settings()
         self.accept()
 
