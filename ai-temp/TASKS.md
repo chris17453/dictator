@@ -73,7 +73,7 @@
 
 ---
 
-**🎉 PHASE 1 COMPLETE! All critical fixes and stability improvements done. 301 tests passing.**
+**🎉 PHASE 1 COMPLETE! All critical fixes and stability improvements done. 314 tests passing.**
 
 ---
 
@@ -115,7 +115,7 @@
 - [ ] **Add history statistics** - Word count, character count, sessions
 
 ### 2.5 UI/UX Improvements
-- [ ] **Add loading indicator** - Show when Whisper model is loading
+- [x] **Add loading indicator** - ✅ COMPLETED 2025-12-26 - Show when Whisper model is loading (orange text, 13 tests)
 - [ ] **Add tooltips** - Help text on all buttons/controls
 - [ ] **Add keyboard shortcuts** - Document and expand shortcuts
 - [ ] **Add visual feedback** - Better confirmation for all actions
