@@ -46,7 +46,7 @@
 - [x] **Fix SSL verification** - ✅ COMPLETED 2025-12-24 - Removed SSL bypass, enabled secure certificate verification
 
 ### 1.2 Error Handling
-- [ ] Replace all bare `except: pass` with proper error handling
+- [x] **Replace all bare `except: pass` with proper error handling** - ✅ COMPLETED 2025-12-26 - All 4 bare except replaced with specific exceptions and logging (17 tests)
 - [x] **Add user-facing error dialogs** - ✅ COMPLETED 2025-12-24 - Modal QMessageBox dialogs for all user-facing errors
 - [x] **Implement config load/save error reporting** - ✅ COMPLETED 2025-12-24 - Dialogs for config corruption and save failures
 - [x] **Add error recovery for failed transcriptions** - ✅ COMPLETED 2025-12-24 - Error dialogs with troubleshooting steps
@@ -437,6 +437,20 @@ For EVERY feature, follow TDD cycle:
 - **Commits**: 44422d2 (feature implementation)
 - **Files**: src/settings_ui.py, src/dictator.py, tests/test_debug_mode_toggle.py
 - **User Impact**: Users can now enable verbose debug logging for troubleshooting
+
+**Phase 1.2: Bare Except Handler Replacement** ✅ (TDD Complete)
+- **RED**: Created 17 comprehensive tests in tests/test_error_handling.py
+- **GREEN**: Replaced all 4 bare except statements with proper error handling
+  - gui.py: 3 bare except fixed - icon loading uses (FileNotFoundError, AttributeError, OSError)
+  - gui.py: Emergency cleanup uses Exception with exc_info=True for traceback
+  - audio_recorder_sd.py: Temp cleanup uses (OSError, FileNotFoundError, PermissionError)
+  - All errors now logged with context (icon size, file path, error details)
+  - No more silent exception handling
+  - Specific exceptions don't catch SystemExit, KeyboardInterrupt
+- **Result**: All 17 tests PASS (100%) - 224 total tests passing
+- **Commits**: 41c3d9a (implementation)
+- **Files**: src/gui.py, src/audio_recorder_sd.py, tests/test_error_handling.py
+- **User Impact**: Better error logging for debugging, no silent failures
 
 ---
 
