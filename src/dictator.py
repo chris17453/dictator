@@ -356,7 +356,32 @@ class DictatorWindow(QMainWindow):
         self.record_btn.clicked.connect(self.toggle_manual_recording)
         self.record_btn.setToolTip("Click to start/stop listening, or press Ctrl+Space")
         top_layout.addWidget(self.record_btn)
-        
+
+        # Pause/Resume button (only visible during recording)
+        self.pause_btn = QPushButton("⏸ Pause")
+        self.pause_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(255, 152, 0, 150);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-size: 13px;
+                font-weight: bold;
+                margin: 4px 0;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 172, 20, 180);
+            }
+            QPushButton:pressed {
+                background-color: rgba(235, 132, 0, 200);
+            }
+        """)
+        self.pause_btn.clicked.connect(self.toggle_pause)
+        self.pause_btn.setToolTip("Pause/resume recording without stopping")
+        self.pause_btn.hide()  # Hidden by default, shown when recording
+        top_layout.addWidget(self.pause_btn)
+
         # Volume meter
         self.volume_frame = QFrame()
         self.volume_frame.setFixedHeight(40)
@@ -960,10 +985,13 @@ class DictatorWindow(QMainWindow):
         """)
         
         self.recorder.start_recording(self.on_transcription_ready)
-        
+
         # Update tray menu
         self.update_tray_recording_action(True)
-    
+
+        # Show pause button and update UI
+        self.update_ui_for_recording_state()
+
     def stop_recording(self):
         log.info(" STOP_RECORDING: Starting stop recording process...")
         
@@ -1023,12 +1051,58 @@ class DictatorWindow(QMainWindow):
             
             # Update tray menu
             self.update_tray_recording_action(False)
-            
+
+            # Hide pause button when stopping
+            self.pause_btn.hide()
+
         except Exception as e:
             log.error(f"FATAL ERROR in stop_recording: {e}")
             import traceback
             traceback.print_exc()
-    
+
+    def toggle_pause(self):
+        """Toggle between pause and resume during recording."""
+        log.debug(" PAUSE: toggle_pause called")
+
+        if not self.recorder.is_recording:
+            log.debug(" PAUSE: Not recording, ignoring")
+            return
+
+        if self.recorder.is_paused:
+            # Resume
+            log.info(" PAUSE: Resuming recording")
+            self.recorder.resume_recording()
+            self.status_label.setText("🎤 Listening...")
+            self.status_label.setStyleSheet("color: #4CAF50; font-size: 13px;")
+            self.pause_btn.setText("⏸ Pause")
+        else:
+            # Pause
+            log.info(" PAUSE: Pausing recording")
+            self.recorder.pause_recording()
+            self.status_label.setText("⏸ Paused - Click Resume to continue")
+            self.status_label.setStyleSheet("color: #FF9800; font-size: 13px;")
+            self.pause_btn.setText("▶ Resume")
+
+        QApplication.processEvents()
+
+    def update_ui_for_recording_state(self):
+        """Update UI elements based on current recording/paused state."""
+        if self.recorder.is_recording:
+            # Show pause button during recording
+            self.pause_btn.show()
+
+            if self.recorder.is_paused:
+                self.pause_btn.setText("▶ Resume")
+                self.status_label.setText("⏸ Paused - Click Resume to continue")
+                self.status_label.setStyleSheet("color: #FF9800; font-size: 13px;")
+            else:
+                self.pause_btn.setText("⏸ Pause")
+                self.status_label.setText("🎤 Listening...")
+                self.status_label.setStyleSheet("color: #4CAF50; font-size: 13px;")
+        else:
+            # Hide pause button when not recording
+            self.pause_btn.hide()
+
     def on_transcription_ready(self, text, language):
         """Thread-safe callback - emit signal for main thread handling"""
         log.debug(f"ON_TRANSCRIPTION_READY called with: '{text}', '{language}'")

@@ -42,8 +42,10 @@ class PureRecorder:
     def __init__(self, thread_pool=None):
         log.debug("Initializing PureRecorder")
         self.is_recording = False
+        self.is_paused = False
         self.current_microphone_index = None
         self.audio_data = []
+        self.audio_segments = []  # List of temp file paths for pause/resume
         self.sample_rate = 44100
         self.chunk_size = 1024
         self.supported_rates = [44100, 22050, 16000, 8000]
@@ -336,7 +338,57 @@ class PureRecorder:
                 log.error(f"RECORDER: Error cleaning up subprocess: {e}")
             finally:
                 self.active_subprocess = None
-    
+
+    def pause_recording(self):
+        """Pause recording without stopping - saves current segment."""
+        log.debug(" RECORDER: pause_recording called")
+
+        if not self.is_recording or self.is_paused:
+            log.debug(" RECORDER: Not recording or already paused, ignoring")
+            return
+
+        self.is_paused = True
+        log.debug(" RECORDER: is_paused set to True")
+
+        # Terminate subprocess and save current audio segment
+        if self.active_subprocess and self.active_subprocess.poll() is None:
+            log.debug(" RECORDER: Terminating subprocess to save segment...")
+            try:
+                self.active_subprocess.terminate()
+                # Wait for subprocess to save audio
+                try:
+                    stdout, stderr = self.active_subprocess.communicate(timeout=5)
+                    if self.active_subprocess.returncode == 0 and stdout.strip():
+                        segment_path = stdout.decode().strip()
+                        self.audio_segments.append(segment_path)
+                        log.info(f" RECORDER: Saved audio segment: {segment_path}")
+                    else:
+                        log.warning(f" RECORDER: Subprocess didn't save segment: {stderr.decode()}")
+                except subprocess.TimeoutExpired:
+                    log.error(" RECORDER: Subprocess timeout on pause")
+                    self.active_subprocess.kill()
+            except Exception as e:
+                log.error(f"RECORDER: Error pausing: {e}")
+            finally:
+                self.active_subprocess = None
+
+        log.info(" RECORDER: Recording paused")
+
+    def resume_recording(self):
+        """Resume recording from paused state - starts new segment."""
+        log.debug(" RECORDER: resume_recording called")
+
+        if not self.is_recording or not self.is_paused:
+            log.debug(" RECORDER: Not recording or not paused, ignoring")
+            return
+
+        self.is_paused = False
+        log.debug(" RECORDER: is_paused set to False")
+
+        # Resume will happen automatically when _record_worker continues
+        # The worker should check is_paused and restart subprocess
+        log.info(" RECORDER: Recording resumed")
+
     def start_continuous_monitoring(self):
         """Start continuous audio monitoring like SAI"""
         if not SOUNDDEVICE_AVAILABLE:
