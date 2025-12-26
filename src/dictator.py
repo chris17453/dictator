@@ -256,6 +256,25 @@ class DictatorWindow(QMainWindow):
         settings_btn.clicked.connect(self.toggle_settings)
         settings_btn.setToolTip("Open settings to configure microphone, model, language, and appearance")
 
+        # Help button
+        help_btn = QPushButton("?")
+        help_btn.setFixedSize(30, 30)
+        help_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(70, 130, 180, 150);
+                color: white;
+                border: none;
+                border-radius: 15px;
+                font-size: 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: rgba(90, 150, 200, 180);
+            }
+        """)
+        help_btn.clicked.connect(self.show_shortcuts_help)
+        help_btn.setToolTip("Show keyboard shortcuts")
+
         # Minimize button
         minimize_btn = QPushButton("−")
         minimize_btn.setFixedSize(30, 30)
@@ -293,6 +312,7 @@ class DictatorWindow(QMainWindow):
 
         header_layout.addWidget(title_label)
         header_layout.addStretch()
+        header_layout.addWidget(help_btn)
         header_layout.addWidget(settings_btn)
         header_layout.addWidget(minimize_btn)
         header_layout.addWidget(close_btn)
@@ -1373,6 +1393,54 @@ class DictatorWindow(QMainWindow):
     
     def update_status_label(self, text):
         self.status_label.setText(text)
+
+    def get_shortcuts_list(self):
+        """Get list of keyboard shortcuts with descriptions."""
+        hotkey_str = "+".join(self.current_hotkey)
+
+        shortcuts = {
+            hotkey_str: "Start/stop recording (toggle listening)",
+            "Click 🎤 button": "Start/stop recording (alternative)",
+            "Click ⚙ button": "Open settings",
+            "Click ? button": "Show this help",
+            "Click − button": "Minimize to system tray",
+            "Settings → Hotkeys": "Change the recording hotkey",
+        }
+        return shortcuts
+
+    def show_shortcuts_help(self):
+        """Show keyboard shortcuts help dialog."""
+        shortcuts = self.get_shortcuts_list()
+
+        # Build help text with clear sections
+        help_text = "═══ KEYBOARD SHORTCUTS ═══\n\n"
+
+        # Recording section
+        hotkey_str = "+".join(self.current_hotkey)
+        help_text += f"📝 RECORDING:\n"
+        help_text += f"  {hotkey_str} — Start/stop dictation\n"
+        help_text += f"  Click 🎤 button — Alternative to hotkey\n\n"
+
+        # Window controls section
+        help_text += f"🪟 WINDOW CONTROLS:\n"
+        help_text += f"  Click ⚙ — Open settings\n"
+        help_text += f"  Click ? — Show this help\n"
+        help_text += f"  Click − — Minimize to tray\n"
+        help_text += f"  Click ✕ — Close app\n\n"
+
+        # Customization section
+        help_text += f"⚙️  CUSTOMIZATION:\n"
+        help_text += f"  Settings → Hotkeys — Change recording key\n"
+        help_text += f"  Settings → Whisper — Choose model & language\n"
+        help_text += f"  Settings → Appearance — Customize colors\n\n"
+
+        help_text += f"Current hotkey: {hotkey_str}"
+
+        QMessageBox.information(
+            self,
+            "Keyboard Shortcuts & Help",
+            help_text
+        )
 
     def _on_model_loading_started(self):
         """Called when Whisper model starts loading."""
