@@ -48,6 +48,14 @@ log = get_logger(__name__)
 
 
 class DictatorWindow(QMainWindow):
+    # Qt signals for thread-safe UI updates
+    transcriptionComplete = pyqtSignal(str, str)  # text, language
+    statusUpdate = pyqtSignal(str, str)  # status, style
+    addHistoryItem = pyqtSignal(str)  # text
+    toggleRecording = pyqtSignal()  # no args
+    copyToClipboard = pyqtSignal(str)  # text
+    typeText = pyqtSignal(str)  # text
+
     def __init__(self, no_tray=False):
         super().__init__()
         log.info("Initializing DICTATOR window")
@@ -98,10 +106,7 @@ class DictatorWindow(QMainWindow):
         
         # Prevent recursion during shutdown
         self.is_closing = False
-        
-        # UI update queue system like SAI
-        self.ui_update_queue = queue.Queue()
-        
+
         # Recording timer
         self.recording_start_time = None
         self.recording_timer = QTimer()
@@ -111,6 +116,15 @@ class DictatorWindow(QMainWindow):
         self.watchdog = UIWatchdog(self)
         
         self.init_ui()
+
+        # Connect Qt signals to slots for thread-safe UI updates
+        self.transcriptionComplete.connect(self._safe_handle_transcription)
+        self.statusUpdate.connect(self._safe_update_status)
+        self.addHistoryItem.connect(self._safe_add_history_item)
+        self.toggleRecording.connect(self._safe_toggle_recording)
+        self.copyToClipboard.connect(self._safe_copy_to_clipboard)
+        self.typeText.connect(self._safe_type_text)
+
         self.load_config()
         
         
@@ -118,12 +132,7 @@ class DictatorWindow(QMainWindow):
         self.hide_timer = QTimer()
         self.hide_timer.timeout.connect(self.auto_hide)
         self.hide_timer.setSingleShot(True)
-        
-        # UI update processing timer like SAI
-        self.ui_update_timer = QTimer()
-        self.ui_update_timer.timeout.connect(self.process_ui_updates)
-        self.ui_update_timer.start(16)  # ~60fps like SAI
-        
+
         # Connect status update callback
         self.recorder.update_status_callback = self.update_status_label
         
@@ -134,63 +143,6 @@ class DictatorWindow(QMainWindow):
         if not no_tray:
             self.setup_system_tray()
     
-    def request_ui_update(self, action, **kwargs):
-        """Thread-safe method to request UI update like SAI"""
-        self.ui_update_queue.put(UIUpdateRequest(action, **kwargs))
-    
-    def process_ui_updates(self):
-        """Process all pending UI updates like SAI (runs in main thread)"""
-        try:
-            processed_count = 0
-            while True:
-                try:
-                    request = self.ui_update_queue.get_nowait()
-                    log.debug(f"PROCESSING UI UPDATE: {request.action}")
-                    self._handle_ui_update(request)
-                    processed_count += 1
-                    log.debug(f"UI UPDATE COMPLETED: {request.action}")
-                    
-                    # Process max 10 updates per cycle to avoid blocking
-                    if processed_count >= 10:
-                        log.debug(f"Processed {processed_count} updates, yielding control")
-                        break
-                        
-                except queue.Empty:
-                    break
-        except Exception as e:
-            log.error(f"FATAL UI update error: {e}")
-            import traceback
-            traceback.print_exc()
-            # Don't crash the whole app, just log the error
-    
-    def _handle_ui_update(self, request):
-        """Handle individual UI update request like SAI"""
-        try:
-            if request.action == "transcription_complete":
-                text = request.kwargs.get('text', '')
-                language = request.kwargs.get('language', 'en')
-                self._safe_handle_transcription(text, language)
-            elif request.action == "add_history_item":
-                text = request.kwargs.get('text', '')
-                self._safe_add_history_item(text)
-            elif request.action == "update_status":
-                status = request.kwargs.get('status', '')
-                style = request.kwargs.get('style', '')
-                self._safe_update_status(status, style)
-            elif request.action == "toggle_recording":
-                log.debug(" UI_UPDATE: Processing toggle_recording from hotkey")
-                self._safe_toggle_recording()
-            elif request.action == "copy_to_clipboard":
-                text = request.kwargs.get('text', '')
-                log.debug(" UI_UPDATE: Processing copy_to_clipboard")
-                self._safe_copy_to_clipboard(text)
-            elif request.action == "type_text":
-                text = request.kwargs.get('text', '')
-                log.debug(" UI_UPDATE: Processing type_text")
-                self._safe_type_text(text)
-        except Exception as e:
-            log.error(f"Error handling UI update {request.action}: {e}")
-
     def show_error_dialog(self, title, message):
         """
         Show user-facing error dialog with helpful information.
@@ -883,8 +835,8 @@ class DictatorWindow(QMainWindow):
     
     def toggle_recording(self):
         log.debug(" HOTKEY: toggle_recording called from hotkey")
-        # Queue the recording toggle to run on main thread (thread-safe)
-        self.request_ui_update("toggle_recording")
+        # Emit signal to toggle recording on main thread (thread-safe)
+        self.toggleRecording.emit()
     
     def toggle_manual_recording(self):
         log.debug(" BUTTON_CLICK: Manual recording button clicked")
@@ -1012,11 +964,11 @@ class DictatorWindow(QMainWindow):
             traceback.print_exc()
     
     def on_transcription_ready(self, text, language):
-        """Thread-safe callback - just queue the update like SAI"""
+        """Thread-safe callback - emit signal for main thread handling"""
         log.debug(f"ON_TRANSCRIPTION_READY called with: '{text}', '{language}'")
-        log.debug(" Queuing transcription_complete request...")
-        self.request_ui_update("transcription_complete", text=text, language=language)
-        log.debug(" Request queued successfully")
+        log.debug(" Emitting transcriptionComplete signal...")
+        self.transcriptionComplete.emit(text, language)
+        log.debug(" Signal emitted successfully")
     
     def _safe_handle_transcription(self, text, language):
         """Safe transcription handler that runs on main thread"""
@@ -1039,9 +991,8 @@ class DictatorWindow(QMainWindow):
                 "• No other application is using the microphone"
             )
 
-            self.request_ui_update("update_status",
-                                 status="❌ Recording error",
-                                 style="color: #FF9800; font-size: 13px;")
+            self.statusUpdate.emit("❌ Recording error",
+                                   "color: #FF9800; font-size: 13px;")
             return
 
         if text and text.strip():
@@ -1050,24 +1001,22 @@ class DictatorWindow(QMainWindow):
             # Check if our window is active - if not, type the text as keystrokes
             if not self.isActiveWindow():
                 log.debug(" KEYBOARD: Window not active, typing text as keystrokes...")
-                self.request_ui_update("type_text", text=text.strip())
+                self.typeText.emit(text.strip())
             else:
                 log.debug(" CLIPBOARD: Window is active, using clipboard...")
-                # Queue clipboard copy to ensure it runs on main thread
-                self.request_ui_update("copy_to_clipboard", text=text.strip())
+                # Emit signal for clipboard copy on main thread
+                self.copyToClipboard.emit(text.strip())
 
-            self.request_ui_update("add_history_item", text=text.strip())
-            self.request_ui_update("update_status",
-                                 status="Dictation complete",
-                                 style="color: #4CAF50; font-size: 13px;")
+            self.addHistoryItem.emit(text.strip())
+            self.statusUpdate.emit("Dictation complete",
+                                   "color: #4CAF50; font-size: 13px;")
         else:
             if language == "timeout":
                 status = "⏱️ No speech detected - timeout"
             else:
                 status = "❌ No speech detected"
-            self.request_ui_update("update_status",
-                                 status=status,
-                                 style="color: #FF9800; font-size: 13px;")
+            self.statusUpdate.emit(status,
+                                   "color: #FF9800; font-size: 13px;")
         
         # Temporarily disable auto-hide to reduce timer interactions
         # if self.auto_hide_checkbox.isChecked():
@@ -1418,8 +1367,6 @@ class DictatorWindow(QMainWindow):
             self.volume_timer.stop()
         if hasattr(self, 'hide_timer'):
             self.hide_timer.stop()
-        if hasattr(self, 'ui_update_timer'):
-            self.ui_update_timer.stop()
         if hasattr(self, 'recording_timer'):
             self.recording_timer.stop()
         if hasattr(self, 'watchdog'):

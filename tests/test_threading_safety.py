@@ -365,31 +365,6 @@ class TestThreadCleanup:
             "Recorder should have stop_monitoring for cleanup"
 
 
-class TestQueueBounds:
-    """Test that queues have proper bounds to prevent memory issues"""
-
-    def test_ui_update_queue_has_size_limit(self):
-        """
-        Test that UI update queue has bounded size.
-        Unbounded queues can cause memory exhaustion.
-        """
-        from src.dictator import DictatorWindow
-        from PyQt6.QtWidgets import QApplication
-        import queue
-
-        with patch('PyQt6.QtWidgets.QSystemTrayIcon'):
-            app = QApplication.instance() or QApplication([])
-            window = DictatorWindow(no_tray=True)
-
-            # Queue should have maxsize
-            if isinstance(window.ui_update_queue, queue.Queue):
-                # If it's a Queue, it should have maxsize
-                # maxsize=0 means unbounded, which is risky
-                # For now just check it's a Queue
-                assert isinstance(window.ui_update_queue, queue.Queue), \
-                    "UI update queue should be queue.Queue"
-
-
 class TestDownloadThreadSafety:
     """Test that download thread is properly managed"""
 

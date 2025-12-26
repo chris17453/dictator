@@ -100,8 +100,8 @@ class TestGracefulShutdown:
         # Should stop all timers
         assert 'volume_timer.stop' in source
         assert 'hide_timer.stop' in source
-        assert 'ui_update_timer.stop' in source
         assert 'recording_timer.stop' in source
+        # ui_update_timer no longer exists - replaced with Qt signals/slots
 
     def test_cleanup_stops_recorder(self):
         """
