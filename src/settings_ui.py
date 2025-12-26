@@ -266,6 +266,67 @@ class SettingsDialog(QDialog):
         """)
         whisper_layout.addRow("Model Size:", self.model_combo)
 
+        # Language selection dropdown
+        self.language_combo = QComboBox()
+        # Add common languages with display names
+        languages = [
+            ("auto", "Auto-detect"),
+            ("en", "English"),
+            ("es", "Spanish (Español)"),
+            ("fr", "French (Français)"),
+            ("de", "German (Deutsch)"),
+            ("it", "Italian (Italiano)"),
+            ("pt", "Portuguese (Português)"),
+            ("ru", "Russian (Русский)"),
+            ("zh", "Chinese (中文)"),
+            ("ja", "Japanese (日本語)"),
+            ("ko", "Korean (한국어)"),
+            ("ar", "Arabic (العربية)"),
+            ("hi", "Hindi (हिन्दी)"),
+            ("nl", "Dutch (Nederlands)"),
+            ("pl", "Polish (Polski)"),
+            ("tr", "Turkish (Türkçe)"),
+            ("sv", "Swedish (Svenska)"),
+            ("da", "Danish (Dansk)"),
+            ("no", "Norwegian (Norsk)"),
+            ("fi", "Finnish (Suomi)")
+        ]
+        for code, name in languages:
+            self.language_combo.addItem(name, code)
+
+        self.language_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+                min-height: 20px;
+            }
+            QComboBox::drop-down {
+                border: none;
+                background-color: #4CAF50;
+                width: 20px;
+                border-top-right-radius: 4px;
+                border-bottom-right-radius: 4px;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid white;
+                width: 0px;
+                height: 0px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #333;
+                color: white;
+                selection-background-color: #4CAF50;
+                border: 1px solid #4CAF50;
+            }
+        """)
+        whisper_layout.addRow("Language:", self.language_combo)
+
         # Model directory selection
         self.model_dir_input = QLineEdit()
         self.model_dir_input.setPlaceholderText("~/.config/dictator/models")
@@ -958,6 +1019,14 @@ class SettingsDialog(QDialog):
         if index >= 0:
             self.device_combo.setCurrentIndex(index)
 
+        # Load language
+        language = getattr(self.parent_window, 'whisper_language', 'auto')
+        # Find by data (language code), not text (display name)
+        for i in range(self.language_combo.count()):
+            if self.language_combo.itemData(i) == language:
+                self.language_combo.setCurrentIndex(i)
+                break
+
     def save_whisper_settings(self):
         """Save Whisper model settings to parent window"""
         if not self.parent_window:
@@ -966,13 +1035,15 @@ class SettingsDialog(QDialog):
         self.parent_window.whisper_model_size = self.model_combo.currentText()
         self.parent_window.whisper_model_dir = self.model_dir_input.text()
         self.parent_window.whisper_device = self.device_combo.currentText()
+        self.parent_window.whisper_language = self.language_combo.currentData()  # Use data (code), not text (display name)
 
         # Trigger model reload if recorder exists
         if hasattr(self.parent_window, 'recorder'):
             self.parent_window.recorder.whisper_model_size = self.parent_window.whisper_model_size
             self.parent_window.recorder.whisper_model_dir = self.parent_window.whisper_model_dir
             self.parent_window.recorder.whisper_device = self.parent_window.whisper_device
-            log.info(f"Updated Whisper settings: {self.parent_window.whisper_model_size}, {self.parent_window.whisper_model_dir}, {self.parent_window.whisper_device}")
+            self.parent_window.recorder.whisper_language = self.parent_window.whisper_language
+            log.info(f"Updated Whisper settings: model={self.parent_window.whisper_model_size}, dir={self.parent_window.whisper_model_dir}, device={self.parent_window.whisper_device}, language={self.parent_window.whisper_language}")
 
             # Reload the model with new settings
             log.info("Reloading Whisper model with new settings...")

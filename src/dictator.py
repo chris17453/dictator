@@ -99,6 +99,7 @@ class DictatorWindow(QMainWindow):
         self.whisper_model_size = "tiny"  # Default to tiny for fast loading
         self.whisper_model_dir = str(Path.home() / ".config" / "dictator" / "models")
         self.whisper_device = "auto"  # auto, cpu, cuda
+        self.whisper_language = "auto"  # auto-detect, or specific language code (en, es, fr, etc.)
 
         # Debug mode setting (defaults to False)
         self.debug_mode_enabled = False
@@ -1475,12 +1476,14 @@ class DictatorWindow(QMainWindow):
                 self.whisper_model_size = config.get('whisper_model_size', 'tiny')
                 self.whisper_model_dir = config.get('whisper_model_dir', str(Path.home() / ".config" / "dictator" / "models"))
                 self.whisper_device = config.get('whisper_device', 'auto')
+                self.whisper_language = config.get('whisper_language', 'auto')
 
                 # Pass Whisper settings to recorder
                 if hasattr(self.recorder, 'whisper_model_size'):
                     self.recorder.whisper_model_size = self.whisper_model_size
                     self.recorder.whisper_model_dir = self.whisper_model_dir
                     self.recorder.whisper_device = self.whisper_device
+                    self.recorder.whisper_language = self.whisper_language
 
                 # Load debug mode setting and apply log level
                 self.debug_mode_enabled = config.get('debug_mode_enabled', False)
@@ -1608,6 +1611,7 @@ class DictatorWindow(QMainWindow):
                 'whisper_model_size': getattr(self, 'whisper_model_size', 'tiny'),
                 'whisper_model_dir': getattr(self, 'whisper_model_dir', str(Path.home() / ".config" / "dictator" / "models")),
                 'whisper_device': getattr(self, 'whisper_device', 'auto'),
+                'whisper_language': getattr(self, 'whisper_language', 'auto'),
                 'debug_mode_enabled': getattr(self, 'debug_mode_enabled', False)
             }
 

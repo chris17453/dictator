@@ -60,6 +60,7 @@ class PureRecorder:
         self.whisper_model_size = "tiny"
         self.whisper_model_dir = None  # Will use default if None
         self.whisper_device = "auto"
+        self.whisper_language = "auto"  # auto-detect or specific language code
 
         # Thread safety locks
         self.audio_level_lock = threading.Lock()  # Protects audio_data and current_audio_level
@@ -581,8 +582,12 @@ class PureRecorder:
                 if self.whisper_model:
                     log.info(" WHISPER: Starting transcription with faster-whisper...")
                     log.debug(f"WHISPER: Audio length: {len(audio_float)} samples")
-                    
-                    segments, info = self.whisper_model.transcribe(audio_float)
+
+                    # Determine language parameter (None for auto-detect)
+                    language_param = None if self.whisper_language == 'auto' else self.whisper_language
+                    log.debug(f"WHISPER: Using language: {self.whisper_language} (param: {language_param})")
+
+                    segments, info = self.whisper_model.transcribe(audio_float, language=language_param)
                     log.debug(" WHISPER: Transcription completed, processing segments...")
                     
                     text = "".join([segment.text for segment in segments]).strip()
