@@ -974,6 +974,11 @@ class SettingsDialog(QDialog):
             self.parent_window.recorder.whisper_device = self.parent_window.whisper_device
             log.info(f"Updated Whisper settings: {self.parent_window.whisper_model_size}, {self.parent_window.whisper_model_dir}, {self.parent_window.whisper_device}")
 
+            # Reload the model with new settings
+            log.info("Reloading Whisper model with new settings...")
+            self.parent_window.recorder.load_whisper_model()
+            log.info("Whisper model reloaded successfully")
+
     def update_opacity_alpha(self, value):
         """Update opacity using alpha channel (actually works!)"""
         self.opacity_label.setText(f"Opacity: {value}%")
