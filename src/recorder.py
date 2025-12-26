@@ -47,6 +47,10 @@ class PureRecorder:
         self.audio_data = []
         self.audio_segments = []  # List of temp file paths for pause/resume
         self.sample_rate = 44100
+
+        # Preview functionality
+        self.preview_audio_data = None  # Stores recorded audio for preview
+        self.preview_sample_rate = None  # Stores sample rate for preview playback
         self.chunk_size = 1024
         self.supported_rates = [44100, 22050, 16000, 8000]
         self.max_recording_duration = 300  # Default: 5 minutes
@@ -390,6 +394,103 @@ class PureRecorder:
         # The worker should check is_paused and restart subprocess
         log.info(" RECORDER: Recording resumed")
 
+    def preview_audio(self):
+        """Play back the recorded audio for preview before transcription."""
+        try:
+            if self.preview_audio_data is None:
+                log.warning("PREVIEW: No audio data available for preview")
+                return False
+
+            if not SOUNDDEVICE_AVAILABLE:
+                log.error("PREVIEW: sounddevice not available")
+                return False
+
+            log.info(f"PREVIEW: Playing back {len(self.preview_audio_data)} samples at {self.preview_sample_rate}Hz")
+
+            # Convert int16 to float32 for playback (-1.0 to 1.0 range)
+            audio_float = self.preview_audio_data.astype(np.float32) / 32768.0
+
+            # Play audio and wait for completion
+            import sounddevice as sd
+            sd.play(audio_float, samplerate=self.preview_sample_rate)
+            sd.wait()  # Wait for playback to finish
+
+            log.info("PREVIEW: Playback completed")
+            return True
+
+        except Exception as e:
+            log.error(f"PREVIEW: Error playing audio: {e}")
+            return False
+
+    def transcribe_preview_audio(self, callback):
+        """Transcribe the stored preview audio data."""
+        try:
+            if self.preview_audio_data is None:
+                log.error("TRANSCRIBE: No preview audio data available")
+                if callback:
+                    callback("", "no_audio")
+                return
+
+            log.info("TRANSCRIBE: Processing preview audio with Whisper...")
+            audio_array = self.preview_audio_data
+            working_rate = self.preview_sample_rate
+
+            # Process with Whisper
+            log.debug("Processing audio with Whisper...")
+            audio_float = audio_array.astype(np.float32) / 32768.0
+
+            # Resample to 16kHz if needed (Whisper's expected rate)
+            if working_rate != 16000:
+                log.debug(f"WHISPER_RECORD: Resampling from {working_rate}Hz to 16000Hz for Whisper...")
+                try:
+                    import librosa
+                    audio_float = librosa.resample(audio_float, orig_sr=working_rate, target_sr=16000)
+                    log.debug(" WHISPER_RECORD: Resampling successful")
+                except ImportError:
+                    log.error(" WHISPER_RECORD: librosa not available, using audio as-is")
+                except Exception as e:
+                    log.error(f"WHISPER_RECORD: Resampling failed: {e}, using audio as-is")
+
+            # Check for minimum audio length
+            if len(audio_float) < 0.1 * 16000:  # Less than 0.1 seconds
+                log.debug("Audio too short")
+                if callback:
+                    callback("", "too_short")
+                return
+
+            # Transcribe directly with Whisper
+            if self.whisper_model:
+                log.info(" WHISPER: Starting transcription with faster-whisper...")
+                log.debug(f"WHISPER: Audio length: {len(audio_float)} samples")
+
+                # Determine language parameter (None for auto-detect)
+                language_param = None if self.whisper_language == 'auto' else self.whisper_language
+                log.debug(f"WHISPER: Using language: {self.whisper_language} (param: {language_param})")
+
+                segments, info = self.whisper_model.transcribe(audio_float, language=language_param)
+
+                # Collect all segments
+                transcription = ""
+                for segment in segments:
+                    transcription += segment.text + " "
+
+                transcription = transcription.strip()
+                log.info(f" WHISPER: Transcription completed: '{transcription[:50]}...'")
+
+                if callback:
+                    callback(transcription, "success")
+            else:
+                log.error("WHISPER: No Whisper model available")
+                if callback:
+                    callback("", "error")
+
+        except Exception as e:
+            log.error(f"TRANSCRIBE: Error: {e}")
+            import traceback
+            traceback.print_exc()
+            if callback:
+                callback("", "error")
+
     def start_continuous_monitoring(self):
         """Start continuous audio monitoring like SAI"""
         if not SOUNDDEVICE_AVAILABLE:
@@ -625,12 +726,22 @@ class PureRecorder:
                 # Convert raw bytes to numpy array
                 audio_array = np.frombuffer(raw_data, dtype=np.int16)
                 log.info(f"WHISPER_RECORD: Loaded {len(audio_array)} audio samples")
-                
+
             except Exception as e:
                 log.error(f"WHISPER_RECORD: Error loading audio file: {e}")
                 self.callback("", "file_error")
                 return
-            
+
+            # Store preview data for playback before transcription
+            self.preview_audio_data = audio_array
+            self.preview_sample_rate = working_rate
+            log.info(f"PREVIEW: Stored {len(audio_array)} samples at {working_rate}Hz for preview")
+
+            # Notify UI that preview is ready (transcription will happen after user accepts)
+            self.callback("", "preview_ready")
+            return
+
+            # ORIGINAL CODE BELOW - will be called from process_preview_audio after user accepts
             # Process with Whisper
             log.debug("Processing audio with Whisper...")
             audio_float = audio_array.astype(np.float32) / 32768.0

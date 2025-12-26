@@ -394,6 +394,81 @@ class DictatorWindow(QMainWindow):
         self.pause_btn.hide()  # Hidden by default, shown when recording
         top_layout.addWidget(self.pause_btn)
 
+        # Preview controls (shown after recording, before transcription)
+        self.preview_controls = QWidget()
+        preview_layout = QHBoxLayout(self.preview_controls)
+        preview_layout.setContentsMargins(0, 0, 0, 0)
+        preview_layout.setSpacing(8)
+
+        self.preview_btn = QPushButton("🔊 Play Preview")
+        self.preview_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(33, 150, 243, 150);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 10px 16px;
+                font-size: 13px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: rgba(53, 170, 255, 180);
+            }
+            QPushButton:pressed {
+                background-color: rgba(13, 130, 223, 200);
+            }
+        """)
+        self.preview_btn.clicked.connect(self.play_preview)
+        self.preview_btn.setToolTip("Play back the recorded audio")
+        preview_layout.addWidget(self.preview_btn)
+
+        self.accept_recording_btn = QPushButton("✓ Accept & Transcribe")
+        self.accept_recording_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(76, 175, 80, 150);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 10px 16px;
+                font-size: 13px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: rgba(96, 195, 100, 180);
+            }
+            QPushButton:pressed {
+                background-color: rgba(56, 155, 60, 200);
+            }
+        """)
+        self.accept_recording_btn.clicked.connect(self.accept_and_transcribe)
+        self.accept_recording_btn.setToolTip("Accept this recording and transcribe it")
+        preview_layout.addWidget(self.accept_recording_btn)
+
+        self.rerecord_btn = QPushButton("🔄 Re-record")
+        self.rerecord_btn.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(244, 67, 54, 150);
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 10px 16px;
+                font-size: 13px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 87, 74, 180);
+            }
+            QPushButton:pressed {
+                background-color: rgba(224, 47, 34, 200);
+            }
+        """)
+        self.rerecord_btn.clicked.connect(self.discard_and_rerecord)
+        self.rerecord_btn.setToolTip("Discard this recording and record again")
+        preview_layout.addWidget(self.rerecord_btn)
+
+        self.preview_controls.hide()  # Hidden by default
+        top_layout.addWidget(self.preview_controls)
+
         # Volume meter
         self.volume_frame = QFrame()
         self.volume_frame.setFixedHeight(40)
@@ -1124,6 +1199,98 @@ class DictatorWindow(QMainWindow):
 
         QApplication.processEvents()
 
+    def play_preview(self):
+        """Play back the recorded audio for preview."""
+        log.info("PREVIEW: User requested preview playback")
+        self.recorder.preview_audio()
+
+    def accept_and_transcribe(self):
+        """Accept the recording and start transcription."""
+        log.info("PREVIEW: User accepted recording, starting transcription")
+
+        # Save preview data before clearing (for transcription)
+        audio_data = self.recorder.preview_audio_data
+        sample_rate = self.recorder.preview_sample_rate
+
+        # Clear preview data immediately
+        self.recorder.preview_audio_data = None
+        self.recorder.preview_sample_rate = None
+
+        # Hide preview controls immediately
+        self.preview_controls.hide()
+
+        # Process the audio using saved data
+        if audio_data is not None:
+            self.process_preview_audio_internal(audio_data, sample_rate)
+
+    def discard_and_rerecord(self):
+        """Discard the current recording and start a new one."""
+        log.info("PREVIEW: User discarded recording, starting new recording")
+
+        # Clear preview data
+        self.recorder.preview_audio_data = None
+        self.recorder.preview_sample_rate = None
+
+        # Hide preview controls
+        self.preview_controls.hide()
+
+        # Start new recording
+        self.start_recording()
+
+    def show_preview_controls(self):
+        """Show preview controls after recording completes."""
+        log.info("PREVIEW: Showing preview controls")
+        self.preview_controls.show()
+        self.status_label.setText("✓ Recording complete - Preview, Accept, or Re-record")
+        self.status_label.setStyleSheet("color: #2196F3; font-size: 13px;")
+        QApplication.processEvents()
+
+    def process_preview_audio(self):
+        """Legacy method for compatibility - delegates to internal method."""
+        if self.recorder.preview_audio_data is None:
+            log.warning("PREVIEW: No audio data to process")
+            return
+
+        audio_data = self.recorder.preview_audio_data
+        sample_rate = self.recorder.preview_sample_rate
+
+        # Clear preview data
+        self.recorder.preview_audio_data = None
+        self.recorder.preview_sample_rate = None
+
+        # Hide preview controls
+        self.preview_controls.hide()
+
+        self.process_preview_audio_internal(audio_data, sample_rate)
+
+    def process_preview_audio_internal(self, audio_data, sample_rate):
+        """Process the accepted preview audio (transcribe it)."""
+        if audio_data is None:
+            log.warning("PREVIEW: No audio data to process")
+            return
+
+        log.info("PREVIEW: Processing accepted audio")
+
+        # Show transcription in progress
+        self.status_label.setText("🔄 Transcribing...")
+        self.status_label.setStyleSheet("color: #FF9800; font-size: 13px;")
+        QApplication.processEvents()
+
+        # Transcribe in background thread
+        def transcribe_callback(text, status):
+            self.on_transcription_ready(text, status)
+
+        self.transcribe_audio(audio_data, sample_rate, transcribe_callback)
+
+    def transcribe_audio(self, audio_data, sample_rate, callback):
+        """Transcribe audio data using Whisper."""
+        # Run transcription in thread pool
+        if thread_pool:
+            thread_pool.submit(self.recorder.transcribe_preview_audio, callback)
+        else:
+            # Fallback to direct call
+            self.recorder.transcribe_preview_audio(callback)
+
     def update_ui_for_recording_state(self):
         """Update UI elements based on current recording/paused state."""
         if self.recorder.is_recording:
@@ -1152,6 +1319,13 @@ class DictatorWindow(QMainWindow):
     def _safe_handle_transcription(self, text, language):
         """Safe transcription handler that runs on main thread"""
         log.debug(f"SAFE_HANDLE_TRANSCRIPTION: '{text}' (language: {language})")
+
+        # Handle preview_ready status - show preview controls instead of transcribing
+        if language == "preview_ready":
+            log.info("PREVIEW: Recording complete, showing preview controls")
+            self.stop_recording()
+            self.show_preview_controls()
+            return
 
         # Stop recording
         self.stop_recording()
