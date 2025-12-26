@@ -572,7 +572,38 @@ class SettingsDialog(QDialog):
         history_layout.addWidget(actions_group)
         
         tabs.addTab(history_tab, "History")
-        
+
+        # Advanced tab
+        advanced_tab = QWidget()
+        advanced_layout = QVBoxLayout(advanced_tab)
+
+        # Logging settings
+        logging_group = QGroupBox("Logging Settings")
+        logging_layout = QVBoxLayout(logging_group)
+
+        # Debug mode checkbox
+        self.debug_mode_checkbox = QCheckBox("Enable debug logging")
+        self.debug_mode_checkbox.setToolTip(
+            "Enable detailed debug logging for troubleshooting.\n"
+            "Debug logs include verbose information about app operations."
+        )
+        self.debug_mode_checkbox.stateChanged.connect(self.toggle_debug_mode)
+        logging_layout.addWidget(self.debug_mode_checkbox)
+
+        # Debug info label
+        debug_info = QLabel(
+            "Debug mode provides detailed logging information useful for troubleshooting.\n"
+            "Normal operation uses INFO level logging."
+        )
+        debug_info.setStyleSheet("color: #999; font-size: 11px; padding: 5px;")
+        debug_info.setWordWrap(True)
+        logging_layout.addWidget(debug_info)
+
+        advanced_layout.addWidget(logging_group)
+        advanced_layout.addStretch()
+
+        tabs.addTab(advanced_tab, "Advanced")
+
         layout.addWidget(tabs)
         
         # Dialog buttons
@@ -636,7 +667,11 @@ class SettingsDialog(QDialog):
         if hasattr(self.parent_window, 'hotkey_manager'):
             current_hotkey_string = self.parent_window.hotkey_manager.get_hotkey_string()
             self.hotkey_label.setText(current_hotkey_string)
-        
+
+        # Load debug mode setting
+        if hasattr(self.parent_window, 'debug_mode_enabled'):
+            self.debug_mode_checkbox.setChecked(self.parent_window.debug_mode_enabled)
+
         # Load current opacity (if slider exists)
         if hasattr(self, 'opacity_slider') and hasattr(self.parent_window, 'current_opacity_percent'):
             current_opacity = self.parent_window.current_opacity_percent
@@ -1568,6 +1603,30 @@ class SettingsDialog(QDialog):
                 gradient_colors.append((new_r << 16) | (new_g << 8) | new_b)
         return gradient_colors[:63]  # Limit to 63 colors max (3 colors × 21 levels)
     
+    def toggle_debug_mode(self, state):
+        """
+        Handle debug mode checkbox toggle.
+        Updates log level immediately when checkbox is changed.
+
+        Args:
+            state: Qt.CheckState value (0=unchecked, 2=checked)
+        """
+        from src import logger
+
+        # state = 2 means checked, 0 means unchecked
+        debug_enabled = (state == 2)
+
+        if debug_enabled:
+            logger.set_log_level('DEBUG')
+            log.info("Debug mode enabled - log level set to DEBUG")
+        else:
+            logger.set_log_level('INFO')
+            log.info("Debug mode disabled - log level set to INFO")
+
+        # Save to parent window
+        if self.parent_window:
+            self.parent_window.debug_mode_enabled = debug_enabled
+
     def accept_settings(self):
         """Apply settings and close dialog"""
         if not self.parent_window:
