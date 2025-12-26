@@ -78,31 +78,32 @@ class DraggableFrame(QFrame):
 
 
 class ResizeGrip(QLabel):
-    """A resize grip that uses compositor-aware resizing with icon grip"""
-    
+    """A resize grip that uses compositor-aware resizing - Windows style (invisible)"""
+
     def __init__(self, parent_window, direction):
         super().__init__(parent_window)
         self.parent_window = parent_window
         self.direction = direction
-        
-        # Set cursor and icon based on direction
+
+        # Set cursor and size based on direction - Windows style
         if direction in ["northwest", "southeast"]:
             self.setCursor(Qt.CursorShape.SizeFDiagCursor)
-            self.setText("⤢")  # Unicode diagonal resize icon
+            self.setFixedSize(20, 20)  # Corner grips
         elif direction in ["northeast", "southwest"]:
             self.setCursor(Qt.CursorShape.SizeBDiagCursor)
-            self.setText("⤡")  # Unicode diagonal resize icon
-        
-        self.setFixedSize(18, 18)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.setFixedSize(20, 20)  # Corner grips
+        elif direction in ["north", "south"]:
+            self.setCursor(Qt.CursorShape.SizeVerCursor)
+            self.setFixedHeight(6)  # Edge grips - thin vertical strip
+        elif direction in ["east", "west"]:
+            self.setCursor(Qt.CursorShape.SizeHorCursor)
+            self.setFixedWidth(6)  # Edge grips - thin horizontal strip
+
+        # Invisible like Windows
         self.setStyleSheet("""
             QLabel {
-                background-color: rgba(76, 175, 80, 100);
-                border: 1px solid rgba(76, 175, 80, 200);
-                border-radius: 8px;
-                font-size: 12px;
-                color: white;
-                font-weight: bold;
+                background-color: transparent;
+                border: none;
             }
         """)
     
@@ -121,5 +122,13 @@ class ResizeGrip(QLabel):
                     window_handle.startSystemResize(Qt.Edge.RightEdge | Qt.Edge.TopEdge)
                 elif self.direction == "northwest":
                     window_handle.startSystemResize(Qt.Edge.LeftEdge | Qt.Edge.TopEdge)
+                elif self.direction == "north":
+                    window_handle.startSystemResize(Qt.Edge.TopEdge)
+                elif self.direction == "south":
+                    window_handle.startSystemResize(Qt.Edge.BottomEdge)
+                elif self.direction == "east":
+                    window_handle.startSystemResize(Qt.Edge.RightEdge)
+                elif self.direction == "west":
+                    window_handle.startSystemResize(Qt.Edge.LeftEdge)
             event.accept()
 

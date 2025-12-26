@@ -92,15 +92,15 @@ class DictatorWindow(QMainWindow):
         # Track current opacity percentage (since windowOpacity doesn't work)
         self.current_opacity_percent = 95
         
-        # Custom color scheme
-        self.custom_bg_color = "#141414"
-        self.custom_border_color = "#4CAF50" 
-        self.custom_text_color = "#ffffff"
-        self.custom_button_color = "#4CAF50"
-        self.custom_translation_bg_color = "#1a1a1a"
-        self.custom_translation_text_color = "#ffffff"
-        self.custom_history_bg_color = "#0f0f0f"
-        self.custom_history_text_color = "#cccccc"
+        # Custom color scheme - Futuristic theme
+        self.custom_bg_color = "#0f1928"  # Dark blue
+        self.custom_border_color = "#50dcf0"  # Cyan
+        self.custom_text_color = "#f0faff"  # Light cyan-white
+        self.custom_button_color = "#50dcf0"  # Cyan
+        self.custom_translation_bg_color = "#141e2d"  # Dark blue-gray
+        self.custom_translation_text_color = "#f0faff"  # Light cyan-white
+        self.custom_history_bg_color = "#0a1420"  # Darker blue
+        self.custom_history_text_color = "#c0d8e8"  # Light blue-gray
         
         # Font settings
         self.custom_translation_font_family = "Arial"
@@ -215,9 +215,12 @@ class DictatorWindow(QMainWindow):
         main_widget = QWidget()
         main_widget.setStyleSheet("""
             QWidget {
-                background-color: rgba(20, 20, 20, 240);
-                border-radius: 12px;
-                border: 2px solid rgba(76, 175, 80, 120);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(15, 25, 45, 180),
+                    stop:0.5 rgba(20, 30, 50, 160),
+                    stop:1 rgba(10, 20, 40, 180));
+                border-radius: 20px;
+                border: 1px solid rgba(100, 200, 255, 80);
             }
         """)
         main_widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
@@ -234,15 +237,18 @@ class DictatorWindow(QMainWindow):
         top_layout = QVBoxLayout(top_content)
         top_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Header - draggable title area
+        # Header - draggable title area with futuristic glass styling
         title_frame = DraggableFrame(self)
-        title_frame.setFixedHeight(40)
+        title_frame.setFixedHeight(50)
         title_frame.setStyleSheet("""
             QFrame {
-                background-color: rgba(25, 25, 25, 180);
-                border: none;
-                border-radius: 8px;
-                margin: 2px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(30, 60, 100, 120),
+                    stop:0.5 rgba(40, 70, 110, 100),
+                    stop:1 rgba(30, 60, 100, 120));
+                border: 1px solid rgba(100, 180, 255, 60);
+                border-radius: 16px;
+                margin: 3px;
             }
         """)
         
@@ -250,20 +256,38 @@ class DictatorWindow(QMainWindow):
         header_layout.setContentsMargins(10, 5, 10, 5)
         
         title_label = QLabel("🎤 DICTATOR")
-        title_label.setStyleSheet("color: #4CAF50; font-size: 20px; font-weight: bold;")
+        title_label.setStyleSheet("""
+            color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #60D0FF,
+                stop:0.5 #A0E0FF,
+                stop:1 #60D0FF);
+            font-size: 22px;
+            font-weight: bold;
+            padding: 5px;
+        """)
         
         settings_btn = QPushButton("⚙")
-        settings_btn.setFixedSize(30, 30)
+        settings_btn.setFixedSize(36, 36)
         settings_btn.setStyleSheet("""
             QPushButton {
-                background-color: rgba(70, 70, 70, 150);
-                color: white;
-                border: none;
-                border-radius: 15px;
-                font-size: 16px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(60, 120, 180, 100),
+                    stop:1 rgba(40, 100, 160, 100));
+                color: rgba(200, 230, 255, 255);
+                border: 1px solid rgba(100, 180, 255, 80);
+                border-radius: 18px;
+                font-size: 17px;
             }
             QPushButton:hover {
-                background-color: rgba(90, 90, 90, 180);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(80, 140, 200, 140),
+                    stop:1 rgba(60, 120, 180, 140));
+                border: 1px solid rgba(120, 200, 255, 120);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(40, 100, 160, 120),
+                    stop:1 rgba(30, 80, 140, 120));
             }
         """)
         settings_btn.clicked.connect(self.toggle_settings)
@@ -271,18 +295,28 @@ class DictatorWindow(QMainWindow):
 
         # Help button
         help_btn = QPushButton("?")
-        help_btn.setFixedSize(30, 30)
+        help_btn.setFixedSize(36, 36)
         help_btn.setStyleSheet("""
             QPushButton {
-                background-color: rgba(70, 130, 180, 150);
-                color: white;
-                border: none;
-                border-radius: 15px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(60, 120, 180, 100),
+                    stop:1 rgba(40, 100, 160, 100));
+                color: rgba(200, 230, 255, 255);
+                border: 1px solid rgba(100, 180, 255, 80);
+                border-radius: 18px;
                 font-size: 16px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: rgba(90, 150, 200, 180);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(80, 140, 200, 140),
+                    stop:1 rgba(60, 120, 180, 140));
+                border: 1px solid rgba(120, 200, 255, 120);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(40, 100, 160, 120),
+                    stop:1 rgba(30, 80, 140, 120));
             }
         """)
         help_btn.clicked.connect(self.show_shortcuts_help)
@@ -290,34 +324,54 @@ class DictatorWindow(QMainWindow):
 
         # Minimize button
         minimize_btn = QPushButton("−")
-        minimize_btn.setFixedSize(30, 30)
+        minimize_btn.setFixedSize(36, 36)
         minimize_btn.setStyleSheet("""
             QPushButton {
-                background-color: rgba(76, 175, 80, 150);
-                color: white;
-                border: none;
-                border-radius: 15px;
-                font-size: 16px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(80, 200, 120, 100),
+                    stop:1 rgba(60, 180, 100, 100));
+                color: rgba(220, 255, 230, 255);
+                border: 1px solid rgba(120, 220, 150, 80);
+                border-radius: 18px;
+                font-size: 18px;
             }
             QPushButton:hover {
-                background-color: rgba(96, 195, 100, 180);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(100, 220, 140, 140),
+                    stop:1 rgba(80, 200, 120, 140));
+                border: 1px solid rgba(140, 240, 170, 120);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(60, 180, 100, 120),
+                    stop:1 rgba(40, 160, 80, 120));
             }
         """)
         minimize_btn.clicked.connect(self.hide_to_tray)
         minimize_btn.setToolTip("Minimize to system tray")
 
         close_btn = QPushButton("✕")
-        close_btn.setFixedSize(30, 30)
+        close_btn.setFixedSize(36, 36)
         close_btn.setStyleSheet("""
             QPushButton {
-                background-color: rgba(200, 50, 50, 150);
-                color: white;
-                border: none;
-                border-radius: 15px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(240, 80, 80, 100),
+                    stop:1 rgba(220, 60, 60, 100));
+                color: rgba(255, 220, 220, 255);
+                border: 1px solid rgba(255, 120, 120, 80);
+                border-radius: 18px;
                 font-size: 16px;
             }
             QPushButton:hover {
-                background-color: rgba(220, 70, 70, 180);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(255, 100, 100, 140),
+                    stop:1 rgba(240, 80, 80, 140));
+                border: 1px solid rgba(255, 140, 140, 120);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(220, 60, 60, 120),
+                    stop:1 rgba(200, 40, 40, 120));
             }
         """)
         close_btn.clicked.connect(self.close_application)
@@ -335,34 +389,56 @@ class DictatorWindow(QMainWindow):
         # Status
         engine_status = "Whisper (loading...)"
         self.status_label = QLabel(f"Ready - {engine_status} - Press Ctrl+Space to dictate")
-        self.status_label.setStyleSheet("color: #4CAF50; font-size: 13px; margin: 8px 0;")
+        self.status_label.setStyleSheet("""
+            color: rgba(120, 220, 255, 255);
+            font-size: 14px;
+            margin: 10px 0;
+            padding: 4px;
+        """)
         top_layout.addWidget(self.status_label)
         
         # Recording timer
         self.timer_label = QLabel("⏱️ 00:00")
-        self.timer_label.setStyleSheet("color: #FF9800; font-size: 16px; font-weight: bold; margin: 4px 0; text-align: center;")
+        self.timer_label.setStyleSheet("""
+            color: rgba(255, 180, 100, 255);
+            font-size: 18px;
+            font-weight: bold;
+            margin: 6px 0;
+            padding: 4px;
+        """)
         self.timer_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.timer_label.hide()  # Initially hidden
         top_layout.addWidget(self.timer_label)
         
-        # Manual record button
+        # Manual record button with futuristic glass design
         self.record_btn = QPushButton("🎤 Start Listening")
         self.record_btn.setStyleSheet("""
             QPushButton {
-                background-color: rgba(76, 175, 80, 150);
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 12px 20px;
-                font-size: 14px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(60, 180, 220, 120),
+                    stop:0.5 rgba(80, 200, 240, 100),
+                    stop:1 rgba(60, 180, 220, 120));
+                color: rgba(240, 255, 255, 255);
+                border: 2px solid rgba(120, 220, 255, 100);
+                border-radius: 16px;
+                padding: 16px 24px;
+                font-size: 16px;
                 font-weight: bold;
-                margin: 8px 0;
+                margin: 10px 0;
             }
             QPushButton:hover {
-                background-color: rgba(96, 195, 100, 180);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(80, 200, 240, 160),
+                    stop:0.5 rgba(100, 220, 255, 140),
+                    stop:1 rgba(80, 200, 240, 160));
+                border: 2px solid rgba(140, 240, 255, 140);
             }
             QPushButton:pressed {
-                background-color: rgba(56, 155, 60, 200);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(40, 160, 200, 140),
+                    stop:0.5 rgba(60, 180, 220, 120),
+                    stop:1 rgba(40, 160, 200, 140));
+                border: 2px solid rgba(100, 200, 235, 120);
             }
         """)
         self.record_btn.clicked.connect(self.toggle_manual_recording)
@@ -373,20 +449,27 @@ class DictatorWindow(QMainWindow):
         self.pause_btn = QPushButton("⏸ Pause")
         self.pause_btn.setStyleSheet("""
             QPushButton {
-                background-color: rgba(255, 152, 0, 150);
-                color: white;
-                border: none;
-                border-radius: 8px;
-                padding: 8px 16px;
-                font-size: 13px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(255, 180, 80, 110),
+                    stop:1 rgba(235, 160, 60, 110));
+                color: rgba(255, 250, 240, 255);
+                border: 2px solid rgba(255, 200, 120, 100);
+                border-radius: 14px;
+                padding: 12px 18px;
+                font-size: 14px;
                 font-weight: bold;
-                margin: 4px 0;
+                margin: 6px 0;
             }
             QPushButton:hover {
-                background-color: rgba(255, 172, 20, 180);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(255, 200, 100, 150),
+                    stop:1 rgba(255, 180, 80, 150));
+                border: 2px solid rgba(255, 220, 140, 140);
             }
             QPushButton:pressed {
-                background-color: rgba(235, 132, 0, 200);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(235, 160, 60, 130),
+                    stop:1 rgba(215, 140, 40, 130));
             }
         """)
         self.pause_btn.clicked.connect(self.toggle_pause)
@@ -403,19 +486,26 @@ class DictatorWindow(QMainWindow):
         self.preview_btn = QPushButton("🔊 Play Preview")
         self.preview_btn.setStyleSheet("""
             QPushButton {
-                background-color: rgba(33, 150, 243, 150);
-                color: white;
-                border: none;
-                border-radius: 8px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(100, 180, 255, 110),
+                    stop:1 rgba(80, 160, 235, 110));
+                color: rgba(240, 250, 255, 255);
+                border: 1px solid rgba(140, 200, 255, 100);
+                border-radius: 12px;
                 padding: 10px 16px;
                 font-size: 13px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: rgba(53, 170, 255, 180);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(120, 200, 255, 150),
+                    stop:1 rgba(100, 180, 255, 150));
+                border: 1px solid rgba(160, 220, 255, 140);
             }
             QPushButton:pressed {
-                background-color: rgba(13, 130, 223, 200);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(80, 160, 235, 130),
+                    stop:1 rgba(60, 140, 215, 130));
             }
         """)
         self.preview_btn.clicked.connect(self.play_preview)
@@ -425,19 +515,26 @@ class DictatorWindow(QMainWindow):
         self.accept_recording_btn = QPushButton("✓ Accept & Transcribe")
         self.accept_recording_btn.setStyleSheet("""
             QPushButton {
-                background-color: rgba(76, 175, 80, 150);
-                color: white;
-                border: none;
-                border-radius: 8px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(100, 220, 140, 110),
+                    stop:1 rgba(80, 200, 120, 110));
+                color: rgba(240, 255, 245, 255);
+                border: 1px solid rgba(140, 240, 170, 100);
+                border-radius: 12px;
                 padding: 10px 16px;
                 font-size: 13px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: rgba(96, 195, 100, 180);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(120, 240, 160, 150),
+                    stop:1 rgba(100, 220, 140, 150));
+                border: 1px solid rgba(160, 255, 190, 140);
             }
             QPushButton:pressed {
-                background-color: rgba(56, 155, 60, 200);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(80, 200, 120, 130),
+                    stop:1 rgba(60, 180, 100, 130));
             }
         """)
         self.accept_recording_btn.clicked.connect(self.accept_and_transcribe)
@@ -447,19 +544,26 @@ class DictatorWindow(QMainWindow):
         self.rerecord_btn = QPushButton("🔄 Re-record")
         self.rerecord_btn.setStyleSheet("""
             QPushButton {
-                background-color: rgba(244, 67, 54, 150);
-                color: white;
-                border: none;
-                border-radius: 8px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(255, 120, 110, 110),
+                    stop:1 rgba(235, 100, 90, 110));
+                color: rgba(255, 245, 245, 255);
+                border: 1px solid rgba(255, 150, 140, 100);
+                border-radius: 12px;
                 padding: 10px 16px;
                 font-size: 13px;
                 font-weight: bold;
             }
             QPushButton:hover {
-                background-color: rgba(255, 87, 74, 180);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(255, 140, 130, 150),
+                    stop:1 rgba(255, 120, 110, 150));
+                border: 1px solid rgba(255, 170, 160, 140);
             }
             QPushButton:pressed {
-                background-color: rgba(224, 47, 34, 200);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(235, 100, 90, 130),
+                    stop:1 rgba(215, 80, 70, 130));
             }
         """)
         self.rerecord_btn.clicked.connect(self.discard_and_rerecord)
@@ -469,15 +573,18 @@ class DictatorWindow(QMainWindow):
         self.preview_controls.hide()  # Hidden by default
         top_layout.addWidget(self.preview_controls)
 
-        # Volume meter
+        # Volume meter with futuristic glass design
         self.volume_frame = QFrame()
-        self.volume_frame.setFixedHeight(40)
+        self.volume_frame.setFixedHeight(44)
         self.volume_frame.setStyleSheet("""
             QFrame {
-                background-color: rgba(10, 10, 10, 200); 
-                border-radius: 8px; 
-                margin: 5px 0;
-                border: 1px solid rgba(76, 175, 80, 80);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(15, 30, 50, 140),
+                    stop:0.5 rgba(20, 35, 55, 120),
+                    stop:1 rgba(15, 30, 50, 140));
+                border-radius: 12px;
+                margin: 6px 0;
+                border: 1px solid rgba(100, 200, 255, 60);
             }
         """)
         
@@ -491,28 +598,65 @@ class DictatorWindow(QMainWindow):
             # Use QFrame instead of QProgressBar for actual volume bars
             bar = QFrame()
             bar.setFixedSize(6, 20)
-            
+
+            # Futuristic gradient colors based on level
             if i < 20:
-                color = "#4CAF50"  # Green
+                # Cyan/teal for safe levels
+                on_gradient = """
+                    qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 rgba(80, 220, 240, 200),
+                        stop:1 rgba(60, 180, 200, 180))
+                """
+                border_color = "rgba(100, 240, 255, 180)"
             elif i < 25:
-                color = "#FFC107"  # Yellow  
+                # Orange for warning levels
+                on_gradient = """
+                    qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 rgba(255, 180, 80, 200),
+                        stop:1 rgba(230, 140, 60, 180))
+                """
+                border_color = "rgba(255, 200, 100, 180)"
             else:
-                color = "#F44336"  # Red
-            
-            # Default to off state
-            bar.setStyleSheet(f"""
-                QFrame {{
-                    background-color: rgba(40, 40, 40, 120);
-                    border: 1px solid rgba(80, 80, 80, 60);
-                    border-radius: 2px;
-                }}
+                # Red for danger levels
+                on_gradient = """
+                    qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 rgba(255, 100, 100, 200),
+                        stop:1 rgba(220, 60, 60, 180))
+                """
+                border_color = "rgba(255, 120, 120, 180)"
+
+            # Default to off state (dark with subtle glow)
+            bar.setStyleSheet("""
+                QFrame {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 rgba(30, 40, 50, 140),
+                        stop:1 rgba(20, 30, 40, 120));
+                    border: 1px solid rgba(80, 100, 120, 80);
+                    border-radius: 3px;
+                }
             """)
-            
+
             # Store the colors for later use
-            bar.on_color = color
-            bar.off_color = "rgba(40, 40, 40, 120)"
+            bar.on_gradient = on_gradient
+            bar.border_color = border_color
+            bar.off_style = """
+                QFrame {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 rgba(30, 40, 50, 140),
+                        stop:1 rgba(20, 30, 40, 120));
+                    border: 1px solid rgba(80, 100, 120, 80);
+                    border-radius: 3px;
+                }
+            """
+            bar.on_style = f"""
+                QFrame {{
+                    background: {on_gradient};
+                    border: 1px solid {border_color};
+                    border-radius: 3px;
+                }}
+            """
             bar.is_on = False
-            
+
             self.volume_bars.append(bar)
             volume_layout.addWidget(bar)
         
@@ -535,10 +679,13 @@ class DictatorWindow(QMainWindow):
         self.quality_warning_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.quality_warning_label.setStyleSheet("""
             QLabel {
-                background-color: rgba(255, 152, 0, 200);
-                color: white;
-                border: 2px solid rgba(255, 152, 0, 255);
-                border-radius: 8px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(255, 160, 60, 160),
+                    stop:0.5 rgba(240, 140, 40, 140),
+                    stop:1 rgba(255, 160, 60, 160));
+                color: rgba(255, 255, 255, 255);
+                border: 2px solid rgba(255, 180, 80, 180);
+                border-radius: 10px;
                 padding: 8px 12px;
                 font-size: 13px;
                 font-weight: bold;
@@ -550,25 +697,38 @@ class DictatorWindow(QMainWindow):
 
         # Current transcription text area
         current_label = QLabel("Current Transcription:")
-        current_label.setStyleSheet("color: #4CAF50; font-size: 12px; font-weight: bold; margin-top: 8px;")
+        current_label.setStyleSheet("""
+            QLabel {
+                color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(80, 220, 240, 255),
+                    stop:1 rgba(100, 200, 255, 255));
+                font-size: 12px;
+                font-weight: bold;
+                margin-top: 8px;
+            }
+        """)
         top_layout.addWidget(current_label)
-        
+
         self.current_text_area = QTextEdit()
         self.current_text_area.setPlaceholderText("Most recent transcription will appear here... (Click to copy to clipboard)")
         self.current_text_area.setStyleSheet("""
             QTextEdit {
-                background-color: rgba(25, 25, 25, 200);
-                border: 2px solid rgba(76, 175, 80, 100);
-                border-radius: 8px;
-                color: #FFFFFF;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(20, 30, 45, 160),
+                    stop:1 rgba(15, 25, 40, 180));
+                border: 2px solid rgba(100, 200, 240, 100);
+                border-radius: 10px;
+                color: rgba(240, 250, 255, 255);
                 font-size: 14px;
                 font-weight: bold;
                 padding: 8px;
                 margin: 4px 0;
             }
             QTextEdit:hover {
-                border: 2px solid rgba(76, 175, 80, 150);
-                background-color: rgba(30, 30, 30, 200);
+                border: 2px solid rgba(120, 220, 255, 140);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(25, 35, 50, 180),
+                    stop:1 rgba(20, 30, 45, 200));
             }
         """)
         self.current_text_area.setFixedHeight(80)
@@ -582,10 +742,12 @@ class DictatorWindow(QMainWindow):
         self.history_toggle = QPushButton("📜 History (0 items) ▼")
         self.history_toggle.setStyleSheet("""
             QPushButton {
-                background-color: rgba(76, 175, 80, 100);
-                color: white;
-                border: none;
-                border-radius: 6px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(60, 180, 200, 120),
+                    stop:1 rgba(40, 160, 180, 140));
+                color: rgba(240, 255, 255, 255);
+                border: 1px solid rgba(100, 220, 240, 100);
+                border-radius: 8px;
                 padding: 8px 12px;
                 font-size: 12px;
                 font-weight: bold;
@@ -593,10 +755,16 @@ class DictatorWindow(QMainWindow):
                 margin: 8px 0 4px 0;
             }
             QPushButton:hover {
-                background-color: rgba(96, 195, 100, 120);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(80, 200, 220, 140),
+                    stop:1 rgba(60, 180, 200, 160));
+                border: 1px solid rgba(120, 240, 255, 140);
             }
             QPushButton:pressed {
-                background-color: rgba(56, 155, 60, 150);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(40, 160, 180, 140),
+                    stop:1 rgba(30, 140, 160, 160));
+                border: 1px solid rgba(80, 200, 220, 120);
             }
         """)
         self.history_toggle.clicked.connect(self.toggle_history)
@@ -612,20 +780,33 @@ class DictatorWindow(QMainWindow):
         self.history_scroll = QScrollArea()
         self.history_scroll.setStyleSheet("""
             QScrollArea {
-                background-color: rgba(15, 15, 15, 200);
-                border: 2px solid rgba(76, 175, 80, 100);
-                border-radius: 8px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(15, 25, 40, 160),
+                    stop:1 rgba(10, 20, 35, 180));
+                border: 2px solid rgba(100, 200, 240, 100);
+                border-radius: 10px;
                 margin: 0 0 8px 0;
             }
             QScrollBar:vertical {
-                background-color: rgba(40, 40, 40, 120);
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(25, 35, 50, 140),
+                    stop:1 rgba(20, 30, 45, 140));
                 width: 12px;
                 border-radius: 6px;
+                border: 1px solid rgba(80, 120, 160, 80);
             }
             QScrollBar::handle:vertical {
-                background-color: rgba(76, 175, 80, 150);
-                border-radius: 6px;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(80, 200, 240, 160),
+                    stop:1 rgba(60, 180, 220, 160));
+                border-radius: 5px;
                 min-height: 20px;
+                border: 1px solid rgba(120, 220, 255, 120);
+            }
+            QScrollBar::handle:vertical:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(100, 220, 255, 180),
+                    stop:1 rgba(80, 200, 240, 180));
             }
         """)
         
@@ -718,15 +899,25 @@ class DictatorWindow(QMainWindow):
         log.debug(f"OPACITY: Updated window alpha to {alpha} ({opacity_percent}%) with custom colors")
     
     def apply_custom_colors(self):
-        """Apply custom colors to all UI components"""
+        """Apply custom colors to all UI components
+
+        NOTE: Currently disabled to preserve the futuristic gradient theme.
+        The custom colors are stored in config but not applied to UI elements
+        to maintain the glass-morphism design.
+        """
         if not hasattr(self, 'main_widget'):
             return
-        
+
+        # Store custom colors but don't apply them (preserving gradient theme)
         # Get custom colors with fallbacks
-        bg_color = getattr(self, 'custom_bg_color', '#141414')
-        border_color = getattr(self, 'custom_border_color', '#4CAF50')
-        text_color = getattr(self, 'custom_text_color', '#ffffff')
-        button_color = getattr(self, 'custom_button_color', '#4CAF50')
+        bg_color = getattr(self, 'custom_bg_color', '#0f1928')
+        border_color = getattr(self, 'custom_border_color', '#50dcf0')
+        text_color = getattr(self, 'custom_text_color', '#f0faff')
+        button_color = getattr(self, 'custom_button_color', '#50dcf0')
+
+        # Return early to preserve futuristic gradient theme
+        # Custom color functionality disabled in favor of glass-morphism design
+        return
         
         # Apply custom colors to main widget background
         alpha = int((self.current_opacity_percent / 100.0) * 255)
@@ -1065,7 +1256,7 @@ class DictatorWindow(QMainWindow):
         self.volume_timer.start(20)  # Update every 20ms for more responsive feedback
         
         self.status_label.setText("👂 LISTENING...")
-        self.status_label.setStyleSheet("color: #F44336; font-size: 13px; font-weight: bold;")
+        self.status_label.setStyleSheet("color: rgba(255, 100, 100, 255); font-size: 13px; font-weight: bold;")
         
         # Update button
         self.record_btn.setText("⏹️ Stop Listening")
@@ -1118,7 +1309,7 @@ class DictatorWindow(QMainWindow):
             
             log.debug(" STOP_RECORDING: Updating status label...")
             self.status_label.setText("Ready - Click to listen or press Ctrl+Space")
-            self.status_label.setStyleSheet("color: #4CAF50; font-size: 13px;")
+            self.status_label.setStyleSheet("color: rgba(80, 220, 240, 255); font-size: 13px;")
             log.debug(" STOP_RECORDING: Status label updated")
             
             log.debug(" STOP_RECORDING: Processing Qt events after status update...")
@@ -1187,7 +1378,7 @@ class DictatorWindow(QMainWindow):
             log.info(" PAUSE: Resuming recording")
             self.recorder.resume_recording()
             self.status_label.setText("🎤 Listening...")
-            self.status_label.setStyleSheet("color: #4CAF50; font-size: 13px;")
+            self.status_label.setStyleSheet("color: rgba(80, 220, 240, 255); font-size: 13px;")
             self.pause_btn.setText("⏸ Pause")
         else:
             # Pause
@@ -1304,7 +1495,7 @@ class DictatorWindow(QMainWindow):
             else:
                 self.pause_btn.setText("⏸ Pause")
                 self.status_label.setText("🎤 Listening...")
-                self.status_label.setStyleSheet("color: #4CAF50; font-size: 13px;")
+                self.status_label.setStyleSheet("color: rgba(80, 220, 240, 255); font-size: 13px;")
         else:
             # Hide pause button when not recording
             self.pause_btn.hide()
@@ -1594,38 +1785,20 @@ class DictatorWindow(QMainWindow):
             
             for i, bar in enumerate(self.volume_bars):
                 should_be_on = (i < num_bars_to_light)
-                
+
                 if should_be_on and not bar.is_on:
-                    # Turn on this bar
-                    bar.setStyleSheet(f"""
-                        QFrame {{
-                            background-color: {bar.on_color};
-                            border: 1px solid rgba(255, 255, 255, 100);
-                            border-radius: 2px;
-                        }}
-                    """)
+                    # Turn on this bar with futuristic gradient
+                    bar.setStyleSheet(bar.on_style)
                     bar.is_on = True
                 elif not should_be_on and bar.is_on:
                     # Turn off this bar
-                    bar.setStyleSheet(f"""
-                        QFrame {{
-                            background-color: {bar.off_color};
-                            border: 1px solid rgba(80, 80, 80, 60);
-                            border-radius: 2px;
-                        }}
-                    """)
+                    bar.setStyleSheet(bar.off_style)
                     bar.is_on = False
         else:
             # Turn off all bars when not recording
             for bar in self.volume_bars:
                 if bar.is_on:
-                    bar.setStyleSheet(f"""
-                        QFrame {{
-                            background-color: {bar.off_color};
-                            border: 1px solid rgba(80, 80, 80, 60);
-                            border-radius: 2px;
-                        }}
-                    """)
+                    bar.setStyleSheet(bar.off_style)
                     bar.is_on = False
 
             # Check audio quality while recording
@@ -1858,7 +2031,7 @@ class DictatorWindow(QMainWindow):
         """Called when Whisper model finishes loading (success or failure)."""
         engine_status = "Whisper" if self.recorder.whisper_model else "No engine"
         self.update_status_label(f"Ready - {engine_status} - Press Ctrl+Space to dictate")
-        self.status_label.setStyleSheet("color: #4CAF50; font-size: 13px;")  # Green
+        self.status_label.setStyleSheet("color: rgba(80, 220, 240, 255); font-size: 13px;")  # Green
 
     def close_application(self):
         # Prevent recursion during shutdown
@@ -2290,23 +2463,45 @@ class DictatorWindow(QMainWindow):
         return icon_paths
 
     def add_resize_grips(self):
-        """Add functional resize grips using compositor-aware resizing"""
-        # Create resize grips using the new ResizeGrip class
+        """Add functional resize grips using compositor-aware resizing - Windows style"""
+        # Corner grips
         self.bottom_right_grip = ResizeGrip(self, "southeast")
         self.bottom_left_grip = ResizeGrip(self, "southwest")
         self.top_right_grip = ResizeGrip(self, "northeast")
         self.top_left_grip = ResizeGrip(self, "northwest")
 
+        # Edge grips (Windows-style)
+        self.top_grip = ResizeGrip(self, "north")
+        self.bottom_grip = ResizeGrip(self, "south")
+        self.left_grip = ResizeGrip(self, "west")
+        self.right_grip = ResizeGrip(self, "east")
+
     def resizeEvent(self, event):
         """Update resize grip positions when window is resized"""
         super().resizeEvent(event)
         if hasattr(self, 'bottom_right_grip'):
-            grip_size = 15
-            # Position grips in corners
+            grip_size = 20  # Corner grip size
+            edge_size = 6   # Edge grip thickness
+
+            # Position corner grips
             self.bottom_right_grip.move(self.width() - grip_size, self.height() - grip_size)
             self.bottom_left_grip.move(0, self.height() - grip_size)
             self.top_right_grip.move(self.width() - grip_size, 0)
             self.top_left_grip.move(0, 0)
+
+            # Position edge grips (Windows-style - cover entire edges)
+            if hasattr(self, 'top_grip'):
+                self.top_grip.setFixedWidth(self.width() - (grip_size * 2))
+                self.top_grip.move(grip_size, 0)
+
+                self.bottom_grip.setFixedWidth(self.width() - (grip_size * 2))
+                self.bottom_grip.move(grip_size, self.height() - edge_size)
+
+                self.left_grip.setFixedHeight(self.height() - (grip_size * 2))
+                self.left_grip.move(0, grip_size)
+
+                self.right_grip.setFixedHeight(self.height() - (grip_size * 2))
+                self.right_grip.move(self.width() - edge_size, grip_size)
 
     def set_window_icon(self):
         """Set the window icon from available icon files"""
