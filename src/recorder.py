@@ -67,6 +67,10 @@ class PureRecorder:
         self.monitoring_lock = threading.Lock()  # Protects is_monitoring flag
         self.model_loading_lock = threading.Lock()  # Protects whisper_model loading
         self.subprocess_lock = threading.Lock()  # Protects active_subprocess
+
+        # Callbacks for UI updates
+        self.model_loading_started_callback = None
+        self.model_loading_complete_callback = None
         self.recording_lock = threading.Lock()  # Protects recording state
 
         # Subprocess tracking for cleanup
@@ -106,6 +110,10 @@ class PureRecorder:
         system certificates: sudo dnf install ca-certificates (or equivalent)
         """
         try:
+            # Notify UI that loading started
+            if self.model_loading_started_callback:
+                self.model_loading_started_callback()
+
             log.info(f"Loading Whisper model: {self.whisper_model_size}")
 
             # Determine device
@@ -142,6 +150,10 @@ class PureRecorder:
                 self.whisper_model_name = self.whisper_model_size
                 log.info(f"Whisper {self.whisper_model_size} model loaded successfully")
                 log.debug(f"Model stored in: {model_path}")
+
+                # Notify UI that loading completed
+                if self.model_loading_complete_callback:
+                    self.model_loading_complete_callback()
                 return
             except Exception as e:
                 log.error(f"Failed to load {self.whisper_model_size} model: {e}")
@@ -157,6 +169,10 @@ class PureRecorder:
                         )
                         self.whisper_model_name = "tiny"
                         log.info("Whisper tiny model loaded successfully (fallback)")
+
+                        # Notify UI that loading completed
+                        if self.model_loading_complete_callback:
+                            self.model_loading_complete_callback()
                         return
                     except Exception as e2:
                         log.error(f"Failed to load fallback tiny model: {e2}")
@@ -165,9 +181,17 @@ class PureRecorder:
             log.error("FATAL: Could not load any Whisper model")
             self.whisper_model = None
 
+            # Notify UI that loading completed (even if failed)
+            if self.model_loading_complete_callback:
+                self.model_loading_complete_callback()
+
         except Exception as e:
             log.error(f"Whisper loading error: {e}")
             self.whisper_model = None
+
+            # Notify UI that loading completed (even if failed)
+            if self.model_loading_complete_callback:
+                self.model_loading_complete_callback()
     
     def refresh_microphones(self):
         self.available_microphones = []

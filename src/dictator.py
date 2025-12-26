@@ -142,7 +142,11 @@ class DictatorWindow(QMainWindow):
 
         # Connect status update callback
         self.recorder.update_status_callback = self.update_status_label
-        
+
+        # Connect model loading callbacks
+        self.recorder.model_loading_started_callback = self._on_model_loading_started
+        self.recorder.model_loading_complete_callback = self._on_model_loading_complete
+
         # Start hotkey manager
         self.hotkey_manager.start(self.toggle_recording)
         
@@ -1364,7 +1368,18 @@ class DictatorWindow(QMainWindow):
     
     def update_status_label(self, text):
         self.status_label.setText(text)
-    
+
+    def _on_model_loading_started(self):
+        """Called when Whisper model starts loading."""
+        self.update_status_label("Loading Whisper model...")
+        self.status_label.setStyleSheet("color: #FFA500; font-size: 13px; font-weight: bold;")  # Orange
+
+    def _on_model_loading_complete(self):
+        """Called when Whisper model finishes loading (success or failure)."""
+        engine_status = "Whisper" if self.recorder.whisper_model else "No engine"
+        self.update_status_label(f"Ready - {engine_status} - Press Ctrl+Space to dictate")
+        self.status_label.setStyleSheet("color: #4CAF50; font-size: 13px;")  # Green
+
     def close_application(self):
         # Prevent recursion during shutdown
         if self.is_closing:
