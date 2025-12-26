@@ -619,6 +619,30 @@ class SettingsDialog(QDialog):
         self.timeout_combo.setToolTip("Maximum recording duration before automatic stop")
         hotkey_layout.addRow("Max Recording Time:", self.timeout_combo)
 
+        # Silence detection (VAD) checkbox
+        self.silence_detection_checkbox = QCheckBox("Enable silence detection")
+        self.silence_detection_checkbox.setToolTip("Automatically stop recording after detecting silence")
+        hotkey_layout.addRow("Auto-stop on silence:", self.silence_detection_checkbox)
+
+        # Silence threshold slider
+        self.silence_threshold_spin = QSpinBox()
+        self.silence_threshold_spin.setRange(1, 20)
+        self.silence_threshold_spin.setSuffix("%")
+        self.silence_threshold_spin.setToolTip("Audio level below which is considered silence (1-20%)")
+        hotkey_layout.addRow("Silence threshold:", self.silence_threshold_spin)
+
+        # Silence duration combo
+        self.silence_duration_combo = QComboBox()
+        self.silence_duration_combo.addItem("1 second", 1.0)
+        self.silence_duration_combo.addItem("1.5 seconds", 1.5)
+        self.silence_duration_combo.addItem("2 seconds", 2.0)
+        self.silence_duration_combo.addItem("2.5 seconds", 2.5)
+        self.silence_duration_combo.addItem("3 seconds", 3.0)
+        self.silence_duration_combo.addItem("4 seconds", 4.0)
+        self.silence_duration_combo.addItem("5 seconds", 5.0)
+        self.silence_duration_combo.setToolTip("How long to wait before stopping after silence is detected")
+        hotkey_layout.addRow("Silence duration:", self.silence_duration_combo)
+
         hotkeys_layout.addWidget(hotkey_group)
 
         tabs.addTab(hotkeys_tab, "Hotkeys")
@@ -788,6 +812,20 @@ class SettingsDialog(QDialog):
             for i in range(self.timeout_combo.count()):
                 if self.timeout_combo.itemData(i) == timeout:
                     self.timeout_combo.setCurrentIndex(i)
+                    break
+
+        # Load silence detection settings
+        if hasattr(self.parent_window, 'silence_detection_enabled'):
+            self.silence_detection_checkbox.setChecked(self.parent_window.silence_detection_enabled)
+
+        if hasattr(self.parent_window, 'silence_threshold'):
+            self.silence_threshold_spin.setValue(self.parent_window.silence_threshold)
+
+        if hasattr(self.parent_window, 'silence_duration'):
+            duration = self.parent_window.silence_duration
+            for i in range(self.silence_duration_combo.count()):
+                if self.silence_duration_combo.itemData(i) == duration:
+                    self.silence_duration_combo.setCurrentIndex(i)
                     break
 
         # Load debug mode setting
@@ -1818,6 +1856,21 @@ class SettingsDialog(QDialog):
             if selected_timeout:
                 self.parent_window.recording_timeout = selected_timeout
                 log.info(f"SETTINGS: Applied recording timeout: {selected_timeout}s")
+
+        # Apply silence detection settings
+        if hasattr(self, 'silence_detection_checkbox'):
+            self.parent_window.silence_detection_enabled = self.silence_detection_checkbox.isChecked()
+            log.info(f"SETTINGS: Applied silence detection enabled: {self.parent_window.silence_detection_enabled}")
+
+        if hasattr(self, 'silence_threshold_spin'):
+            self.parent_window.silence_threshold = self.silence_threshold_spin.value()
+            log.info(f"SETTINGS: Applied silence threshold: {self.parent_window.silence_threshold}%")
+
+        if hasattr(self, 'silence_duration_combo'):
+            selected_duration = self.silence_duration_combo.currentData()
+            if selected_duration:
+                self.parent_window.silence_duration = selected_duration
+                log.info(f"SETTINGS: Applied silence duration: {selected_duration}s")
 
         # Apply Whisper model settings
         self.save_whisper_settings()

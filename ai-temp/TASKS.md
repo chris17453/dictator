@@ -73,7 +73,7 @@
 
 ---
 
-**🎉 PHASE 1 COMPLETE! All critical fixes and stability improvements done. 422 tests passing.**
+**🎉 PHASE 1 COMPLETE! All critical fixes and stability improvements done. 444 tests passing.**
 
 ---
 
@@ -83,7 +83,7 @@
 - [x] **Add push-to-talk mode** - ✅ COMPLETED 2025-12-26 - Toggle vs push-to-talk modes with UI selector in settings (18 tests)
 - [x] **Add pause/resume** - ✅ COMPLETED 2025-12-26 - Pause button appears during recording, saves audio segments (23 tests)
 - [x] **Add recording timeout settings** - ✅ COMPLETED 2025-12-26 - Configurable max recording time with 7 preset options (17 tests)
-- [ ] **Add silence detection settings** - Configurable VAD sensitivity
+- [x] **Add silence detection settings** - ✅ COMPLETED 2025-12-26 - Auto-stop on silence with configurable threshold and duration (22 tests)
 - [x] **Add audio quality indicator** - ✅ COMPLETED 2025-12-26 - Real-time warnings for too quiet/loud audio during recording (22 tests)
 - [ ] **Add recording preview** - Play audio before transcription
 

@@ -78,6 +78,12 @@ class DictatorWindow(QMainWindow):
         self.audio_too_quiet_threshold = 10  # Below 10% is too quiet
         self.audio_too_loud_threshold = 90  # Above 90% risks clipping
 
+        # Silence detection (VAD - Voice Activity Detection)
+        self.silence_detection_enabled = False  # Disabled by default
+        self.silence_threshold = 5  # Audio level below which is considered silence
+        self.silence_duration = 2.5  # Seconds of silence before auto-stop
+        self.silence_start_time = None  # When silence started (or None)
+
         # Session management
         self.current_session = "Default"
         self.current_session_history = []
@@ -1085,6 +1091,9 @@ class DictatorWindow(QMainWindow):
             self.audio_quality_state = 'good'
             self.quality_warning_label.hide()
 
+            # Reset silence detection state
+            self.silence_start_time = None
+
         except Exception as e:
             log.error(f"FATAL ERROR in stop_recording: {e}")
             import traceback
@@ -1448,6 +1457,9 @@ class DictatorWindow(QMainWindow):
             # Check audio quality while recording
             self.check_audio_quality()
 
+            # Check for silence (auto-stop if enabled)
+            self.check_silence()
+
     def check_audio_quality(self):
         """Check current audio level and update quality state."""
         if not self.recorder.is_recording:
@@ -1484,6 +1496,36 @@ class DictatorWindow(QMainWindow):
             self.quality_warning_label.show()
         else:  # good
             self.quality_warning_label.hide()
+
+    def check_silence(self):
+        """Check for silence and auto-stop if silence duration threshold is exceeded."""
+        if not self.recorder.is_recording or not self.silence_detection_enabled:
+            return
+
+        with self.recorder.audio_level_lock:
+            audio_level = self.recorder.current_audio_level
+
+        # Check if audio is below silence threshold
+        if audio_level < self.silence_threshold:
+            # Audio is silent
+            if self.silence_start_time is None:
+                # Silence just started
+                import time
+                self.silence_start_time = time.time()
+                log.debug(f"SILENCE: Silence detected (level: {audio_level})")
+            else:
+                # Silence continuing - check duration
+                import time
+                silence_elapsed = time.time() - self.silence_start_time
+                if silence_elapsed >= self.silence_duration:
+                    # Silence threshold exceeded - auto-stop
+                    log.info(f"SILENCE: Auto-stopping after {silence_elapsed:.1f}s of silence")
+                    self.stop_recording()
+        else:
+            # Audio detected - reset silence tracking
+            if self.silence_start_time is not None:
+                log.debug(f"SILENCE: Audio detected (level: {audio_level}), resetting silence timer")
+            self.silence_start_time = None
 
     def toggle_history(self):
         self.history_collapsed = not self.history_collapsed
@@ -1782,6 +1824,12 @@ class DictatorWindow(QMainWindow):
                     logger.set_log_level('INFO')
                     log.info("CONFIG: Debug mode disabled - log level set to INFO")
 
+                # Load silence detection settings
+                self.silence_detection_enabled = config.get('silence_detection_enabled', False)
+                self.silence_threshold = config.get('silence_threshold', 5)
+                self.silence_duration = config.get('silence_duration', 2.5)
+                log.debug(f"CONFIG: Loaded silence detection - Enabled: {self.silence_detection_enabled}, Threshold: {self.silence_threshold}, Duration: {self.silence_duration}s")
+
                 log.debug(f"CONFIG: Loaded Whisper settings - Model: {self.whisper_model_size}, Dir: {self.whisper_model_dir}, Device: {self.whisper_device}")
                 log.debug(f"CONFIG: Loaded colors - BG: {self.custom_bg_color}, Border: {self.custom_border_color}, Text: {self.custom_text_color}, Button: {self.custom_button_color}")
                 log.debug(f"CONFIG: Loaded translation colors - BG: {self.custom_translation_bg_color}, Text: {self.custom_translation_text_color}")
@@ -1901,7 +1949,10 @@ class DictatorWindow(QMainWindow):
                 'whisper_model_dir': getattr(self, 'whisper_model_dir', str(Path.home() / ".config" / "dictator" / "models")),
                 'whisper_device': getattr(self, 'whisper_device', 'auto'),
                 'whisper_language': getattr(self, 'whisper_language', 'auto'),
-                'debug_mode_enabled': getattr(self, 'debug_mode_enabled', False)
+                'debug_mode_enabled': getattr(self, 'debug_mode_enabled', False),
+                'silence_detection_enabled': getattr(self, 'silence_detection_enabled', False),
+                'silence_threshold': getattr(self, 'silence_threshold', 5),
+                'silence_duration': getattr(self, 'silence_duration', 2.5)
             }
 
             # Validate config is a dict
