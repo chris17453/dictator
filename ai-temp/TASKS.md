@@ -64,7 +64,8 @@
 - [x] **Remove remaining debug emoji** - ✅ COMPLETED 2025-12-24 - Moved to CLI for user-facing output (excluded from logging)
 
 ### 1.4 Thread Safety
-- [ ] Audit all threading code for race conditions
+- [x] **Audit all threading code for race conditions** - ✅ COMPLETED 2025-12-26 - Comprehensive audit identified 8 race conditions, 3 design issues (see docs/THREADING_AUDIT.md)
+- [ ] Fix critical race conditions (audio_queue, audio_data, is_monitoring)
 - [ ] Replace queue-based UI updates with proper Qt signals/slots
 - [x] **Remove monitor thread** - ✅ COMPLETED 2025-12-24 - Removed destructive UIWatchdog that used os._exit
 - [ ] Add proper thread pool management
@@ -451,6 +452,30 @@ For EVERY feature, follow TDD cycle:
 - **Commits**: 41c3d9a (implementation)
 - **Files**: src/gui.py, src/audio_recorder_sd.py, tests/test_error_handling.py
 - **User Impact**: Better error logging for debugging, no silent failures
+
+**Phase 1.4: Threading Code Audit** ✅ (Documentation Complete)
+- Comprehensive audit of all threading code across 5 source files
+- **Identified Issues:**
+  - 8 race conditions (3 HIGH, 5 MEDIUM severity)
+  - 3 threading design issues
+- **Critical Findings:**
+  - audio_queue accessed without synchronization (data corruption risk)
+  - audio_data list modified by multiple threads (HIGH risk)
+  - is_monitoring flag has race condition
+  - whisper_model loading not thread-safe
+  - active_subprocess unprotected access
+- **Design Issues:**
+  - Mixed threading models (queue-based + Qt signals)
+  - No thread pool management
+  - Daemon threads may terminate abruptly
+- **Documentation**: Created docs/THREADING_AUDIT.md with:
+  - Detailed analysis of each race condition
+  - Code examples for proper fixes
+  - Testing recommendations
+  - Prioritized fix roadmap (3 phases)
+- **Commits**: c173175 (audit documentation)
+- **Files**: docs/THREADING_AUDIT.md
+- **Next Steps**: Implement critical race condition fixes (Phase 1 of audit)
 
 ---
 
