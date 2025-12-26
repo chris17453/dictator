@@ -358,6 +358,27 @@ class SettingsDialog(QDialog):
         self.device_combo.setToolTip("Choose processing device (auto, CPU, or CUDA GPU)")
         whisper_layout.addRow("Compute Device:", self.device_combo)
 
+        # Confidence threshold setting
+        self.confidence_threshold_spin = QSpinBox()
+        self.confidence_threshold_spin.setRange(0, 100)
+        self.confidence_threshold_spin.setValue(50)
+        self.confidence_threshold_spin.setSuffix("%")
+        self.confidence_threshold_spin.setStyleSheet("""
+            QSpinBox {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+            }
+            QSpinBox::up-button, QSpinBox::down-button {
+                background-color: #4CAF50;
+                border: none;
+            }
+        """)
+        self.confidence_threshold_spin.setToolTip("Show warning when transcription confidence falls below this threshold (0-100%)")
+        whisper_layout.addRow("Low Confidence Threshold:", self.confidence_threshold_spin)
+
         # Model download section
         download_container = QWidget()
         download_layout = QVBoxLayout(download_container)

@@ -89,7 +89,7 @@
 
 ### 2.2 Transcription Features
 - [x] **Show transcription progress** - ✅ COMPLETED 2025-12-26 - Real-time progress bar with stage indicators during Whisper processing (21 tests)
-- [ ] **Add confidence scores** - Display confidence for transcription
+- [x] **Add confidence scores** - ✅ COMPLETED 2025-12-26 - Extract confidence from Whisper logprob, display with color-coded UI indicator, configurable threshold (25 tests)
 - [x] **Add model selection in UI** - ✅ COMPLETED 2025-12-26 - Choose tiny/base/small/medium models, auto-reload on change (11 tests)
 - [x] **Add language selection** - ✅ COMPLETED 2025-12-26 - Support 20 languages + auto-detect, persists in config (12 tests)
 - [ ] **Add custom vocabulary** - User-defined words/phrases

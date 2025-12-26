@@ -55,9 +55,9 @@ thread_pool = ThreadPoolManager(max_workers=4)
 
 class DictatorWindow(QMainWindow):
     # Qt signals for thread-safe UI updates
-    transcriptionComplete = pyqtSignal(str, str)  # text, language
+    transcriptionComplete = pyqtSignal(str, str, object)  # text, language, confidence (int or None)
     statusUpdate = pyqtSignal(str, str)  # status, style
-    addHistoryItem = pyqtSignal(str)  # text
+    addHistoryItem = pyqtSignal(str, object)  # text, confidence (int or None)
     toggleRecording = pyqtSignal()  # no args
     copyToClipboard = pyqtSignal(str)  # text
     typeText = pyqtSignal(str)  # text
@@ -87,6 +87,9 @@ class DictatorWindow(QMainWindow):
         self.silence_threshold = 5  # Audio level below which is considered silence
         self.silence_duration = 2.5  # Seconds of silence before auto-stop
         self.silence_start_time = None  # When silence started (or None)
+
+        # Confidence score monitoring
+        self.low_confidence_threshold = 50  # Below 50% is considered low confidence
 
         # Session management
         self.current_session = "Default"
@@ -745,6 +748,26 @@ class DictatorWindow(QMainWindow):
         """)
         self.progress_bar.hide()  # Hidden by default
         top_layout.addWidget(self.progress_bar)
+
+        # Confidence score indicator
+        self.confidence_indicator = QLabel("✓ Confidence: 0%")
+        self.confidence_indicator.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.confidence_indicator.setStyleSheet("""
+            QLabel {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(60, 180, 200, 120),
+                    stop:1 rgba(40, 160, 180, 140));
+                color: rgba(240, 255, 255, 255);
+                border: 1px solid rgba(100, 220, 240, 100);
+                border-radius: 8px;
+                padding: 6px 12px;
+                font-size: 12px;
+                font-weight: bold;
+                margin: 4px 0;
+            }
+        """)
+        self.confidence_indicator.hide()  # Hidden by default
+        top_layout.addWidget(self.confidence_indicator)
 
         # Current transcription text area
         current_label = QLabel("Current Transcription:")
@@ -1519,6 +1542,126 @@ class DictatorWindow(QMainWindow):
         self.progress_label.setText(message)
         QApplication.processEvents()
 
+    def update_confidence_display(self, confidence_score):
+        """Update confidence indicator with color-coded display.
+
+        Args:
+            confidence_score: Confidence percentage (0-100)
+        """
+        if confidence_score is None:
+            self.confidence_indicator.hide()
+            return
+
+        # Clamp to valid range
+        confidence_score = max(0, min(100, int(confidence_score)))
+
+        # Choose icon and color based on confidence level
+        if confidence_score >= 80:
+            # High confidence - green/cyan
+            icon = "✓"
+            style = """
+                QLabel {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 rgba(60, 200, 220, 140),
+                        stop:1 rgba(40, 180, 200, 160));
+                    color: rgba(240, 255, 255, 255);
+                    border: 1px solid rgba(100, 240, 255, 140);
+                    border-radius: 8px;
+                    padding: 6px 12px;
+                    font-size: 12px;
+                    font-weight: bold;
+                    margin: 4px 0;
+                }
+            """
+        elif confidence_score >= 50:
+            # Medium confidence - yellow/orange
+            icon = "○"
+            style = """
+                QLabel {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 rgba(255, 180, 80, 160),
+                        stop:1 rgba(240, 160, 60, 180));
+                    color: rgba(255, 255, 255, 255);
+                    border: 1px solid rgba(255, 200, 100, 180);
+                    border-radius: 8px;
+                    padding: 6px 12px;
+                    font-size: 12px;
+                    font-weight: bold;
+                    margin: 4px 0;
+                }
+            """
+        else:
+            # Low confidence - red
+            icon = "⚠"
+            style = """
+                QLabel {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 rgba(255, 100, 100, 160),
+                        stop:1 rgba(240, 80, 80, 180));
+                    color: rgba(255, 255, 255, 255);
+                    border: 1px solid rgba(255, 120, 120, 180);
+                    border-radius: 8px;
+                    padding: 6px 12px;
+                    font-size: 12px;
+                    font-weight: bold;
+                    margin: 4px 0;
+                }
+            """
+
+        self.confidence_indicator.setText(f"{icon} Confidence: {confidence_score}%")
+        self.confidence_indicator.setStyleSheet(style)
+        self.confidence_indicator.show()
+
+        # Show warning if confidence is low
+        if confidence_score < self.low_confidence_threshold:
+            self.show_confidence_warning(confidence_score,
+                f"Low confidence ({confidence_score}%) - transcription may be inaccurate")
+        else:
+            self.hide_confidence_warning()
+
+        QApplication.processEvents()
+
+    def show_confidence_warning(self, confidence_score, message):
+        """Show warning for low confidence transcription."""
+        log.warning(f"CONFIDENCE: Low confidence warning - {confidence_score}%")
+        self.quality_warning_label.setText(f"⚠ {message}")
+        self.quality_warning_label.show()
+        QApplication.processEvents()
+
+    def hide_confidence_warning(self):
+        """Hide confidence warning."""
+        # Only hide if it's showing a confidence warning (not audio quality warning)
+        if self.quality_warning_label.isVisible():
+            text = self.quality_warning_label.text()
+            if "confidence" in text.lower() or "inaccurate" in text.lower():
+                self.quality_warning_label.hide()
+                QApplication.processEvents()
+
+    def handle_transcription_with_confidence(self, text, status, confidence=None):
+        """Handle transcription result with confidence score.
+
+        Args:
+            text: Transcribed text
+            status: Transcription status
+            confidence: Confidence score (0-100) or None
+        """
+        # Update confidence display
+        if confidence is not None:
+            self.update_confidence_display(confidence)
+
+        # Continue with normal transcription handling
+        self._safe_handle_transcription(text, status)
+
+    def add_history_item_with_confidence(self, text, confidence=None):
+        """Add history item with optional confidence score.
+
+        Args:
+            text: Transcribed text
+            confidence: Confidence score (0-100) or None
+        """
+        # Emit signal for UI update (which will add to history)
+        self.addHistoryItem.emit(text, confidence)
+
     def process_preview_audio(self):
         """Legacy method for compatibility - delegates to internal method."""
         if self.recorder.preview_audio_data is None:
@@ -1584,19 +1727,23 @@ class DictatorWindow(QMainWindow):
             # Hide pause button when not recording
             self.pause_btn.hide()
 
-    def on_transcription_ready(self, text, language):
+    def on_transcription_ready(self, text, language, confidence=None):
         """Thread-safe callback - emit signal for main thread handling"""
-        log.debug(f"ON_TRANSCRIPTION_READY called with: '{text}', '{language}'")
+        log.debug(f"ON_TRANSCRIPTION_READY called with: '{text}', '{language}', confidence={confidence}")
         log.debug(" Emitting transcriptionComplete signal...")
-        self.transcriptionComplete.emit(text, language)
+        self.transcriptionComplete.emit(text, language, confidence)
         log.debug(" Signal emitted successfully")
-    
-    def _safe_handle_transcription(self, text, language):
+
+    def _safe_handle_transcription(self, text, language, confidence=None):
         """Safe transcription handler that runs on main thread"""
-        log.debug(f"SAFE_HANDLE_TRANSCRIPTION: '{text}' (language: {language})")
+        log.debug(f"SAFE_HANDLE_TRANSCRIPTION: '{text}' (language: {language}, confidence={confidence})")
 
         # Hide progress bar (transcription complete)
         self.hide_transcription_progress()
+
+        # Update confidence display if available
+        if confidence is not None:
+            self.update_confidence_display(confidence)
 
         # Handle preview_ready status - show preview controls instead of transcribing
         if language == "preview_ready":
@@ -1638,7 +1785,7 @@ class DictatorWindow(QMainWindow):
                 # Emit signal for clipboard copy on main thread
                 self.copyToClipboard.emit(text.strip())
 
-            self.addHistoryItem.emit(text.strip())
+            self.addHistoryItem.emit(text.strip(), confidence)
             self.statusUpdate.emit("Dictation complete",
                                    "color: #4CAF50; font-size: 13px;")
         else:
@@ -1654,17 +1801,18 @@ class DictatorWindow(QMainWindow):
         #     self.hide_timer.start(3000)
         log.debug(" Auto-hide disabled for debugging")
     
-    def _safe_add_history_item(self, text):
+    def _safe_add_history_item(self, text, confidence=None):
         """Safe history addition that runs on main thread"""
-        log.debug(f"SAFE_ADD_HISTORY_ITEM: '{text}'")
-        
+        log.debug(f"SAFE_ADD_HISTORY_ITEM: '{text}' (confidence={confidence})")
+
         try:
             log.debug(" Adding to history list...")
-            # Store history item with session metadata
+            # Store history item with session metadata and confidence
             history_item = {
                 'text': text,
                 'session': self.current_session,
-                'timestamp': QDateTime.currentDateTime().toString()
+                'timestamp': QDateTime.currentDateTime().toString(),
+                'confidence': confidence
             }
             self.history.append(history_item)
             

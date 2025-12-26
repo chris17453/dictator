@@ -58,6 +58,9 @@ class PureRecorder:
         # Progress callback for transcription
         self.progress_callback = None  # Called with (percent, message) during transcription
 
+        # Confidence score tracking
+        self.last_confidence_score = None  # Stores confidence (0-100) from last transcription
+
         # Thread pool for short-lived tasks (recording workers)
         self.thread_pool = thread_pool
 
@@ -397,6 +400,36 @@ class PureRecorder:
         # The worker should check is_paused and restart subprocess
         log.info(" RECORDER: Recording resumed")
 
+    def calculate_confidence(self, avg_logprob):
+        """Convert Whisper's average log probability to confidence score (0-100).
+
+        Whisper returns avg_logprob typically in range of -2.0 (bad) to 0.0 (perfect).
+        We map this to a 0-100 confidence score:
+        - 0.0 or better → 100% (perfect)
+        - -0.3 → 85% (very good)
+        - -0.5 → 75% (good)
+        - -1.0 → 50% (medium)
+        - -2.0 or worse → 0% (very poor)
+
+        Args:
+            avg_logprob: Average log probability from Whisper
+
+        Returns:
+            int: Confidence score from 0-100
+        """
+        if avg_logprob is None:
+            return 50  # Default to medium confidence if unknown
+
+        # Clamp to reasonable range
+        avg_logprob = max(-2.0, min(0.0, avg_logprob))
+
+        # Linear mapping: -2.0 → 0%, 0.0 → 100%
+        # Formula: confidence = 100 * (1 + avg_logprob / 2.0)
+        confidence = 100 * (1 + avg_logprob / 2.0)
+
+        # Round to integer
+        return int(round(confidence))
+
     def preview_audio(self):
         """Play back the recorded audio for preview before transcription."""
         try:
@@ -489,12 +522,29 @@ class PureRecorder:
                 if self.progress_callback:
                     self.progress_callback(90, "Finalizing transcription...")
 
-                # Collect all segments
+                # Collect all segments and calculate confidence
                 transcription = ""
+                total_logprob = 0.0
+                segment_count = 0
+
                 for segment in segments:
                     transcription += segment.text + " "
+                    # Extract confidence from segment
+                    if hasattr(segment, 'avg_logprob'):
+                        total_logprob += segment.avg_logprob
+                        segment_count += 1
 
                 transcription = transcription.strip()
+
+                # Calculate overall confidence from average log probability
+                if segment_count > 0:
+                    avg_logprob = total_logprob / segment_count
+                    self.last_confidence_score = self.calculate_confidence(avg_logprob)
+                    log.info(f" WHISPER: Confidence: {self.last_confidence_score}% (avg_logprob: {avg_logprob:.3f})")
+                else:
+                    self.last_confidence_score = 50  # Default if no segments
+                    log.warning(" WHISPER: No segments with confidence data, using default 50%")
+
                 log.info(f" WHISPER: Transcription completed: '{transcription[:50]}...'")
 
                 # Progress: Complete
@@ -502,7 +552,12 @@ class PureRecorder:
                     self.progress_callback(100, "Complete!")
 
                 if callback:
-                    callback(transcription, "success")
+                    # Pass confidence to callback if it accepts it
+                    try:
+                        callback(transcription, "success", self.last_confidence_score)
+                    except TypeError:
+                        # Fallback for old callback signature without confidence
+                        callback(transcription, "success")
             else:
                 log.error("WHISPER: No Whisper model available")
                 if callback:
