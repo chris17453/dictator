@@ -67,7 +67,7 @@
 - [x] **Audit all threading code for race conditions** - ✅ COMPLETED 2025-12-26 - Comprehensive audit identified 8 race conditions, 3 design issues (see docs/THREADING_AUDIT.md)
 - [x] **Fix critical race conditions** - ✅ COMPLETED 2025-12-26 - Fixed HIGH/MEDIUM severity issues (audio_queue, monitoring, model loading) with locks and Queue (17 tests)
 - [x] **Ensure all UI updates happen on main thread** - ✅ COMPLETED 2025-12-26 - Verified queue-based UI update system, fixed deadlock in start_continuous_monitoring (16 tests)
-- [ ] Replace queue-based UI updates with proper Qt signals/slots
+- [x] **Replace queue-based UI updates with proper Qt signals/slots** - ✅ COMPLETED 2025-12-26 - Refactored to native Qt signals/slots (18 tests), removed queue/timer infrastructure
 - [x] **Remove monitor thread** - ✅ COMPLETED 2025-12-24 - Removed destructive UIWatchdog that used os._exit
 - [ ] Add proper thread pool management
 
