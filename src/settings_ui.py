@@ -607,6 +607,18 @@ class SettingsDialog(QDialog):
         self.recording_mode_combo.setToolTip("Toggle: Press key to start/stop. Push-to-talk: Hold key to record, release to stop")
         hotkey_layout.addRow("Recording Mode:", self.recording_mode_combo)
 
+        # Recording timeout selector
+        self.timeout_combo = QComboBox()
+        self.timeout_combo.addItem("30 seconds", 30)
+        self.timeout_combo.addItem("1 minute", 60)
+        self.timeout_combo.addItem("2 minutes", 120)
+        self.timeout_combo.addItem("5 minutes", 300)
+        self.timeout_combo.addItem("10 minutes", 600)
+        self.timeout_combo.addItem("15 minutes", 900)
+        self.timeout_combo.addItem("30 minutes", 1800)
+        self.timeout_combo.setToolTip("Maximum recording duration before automatic stop")
+        hotkey_layout.addRow("Max Recording Time:", self.timeout_combo)
+
         hotkeys_layout.addWidget(hotkey_group)
 
         tabs.addTab(hotkeys_tab, "Hotkeys")
@@ -768,6 +780,14 @@ class SettingsDialog(QDialog):
             for i in range(self.recording_mode_combo.count()):
                 if self.recording_mode_combo.itemData(i) == mode:
                     self.recording_mode_combo.setCurrentIndex(i)
+                    break
+
+        # Load recording timeout
+        if hasattr(self.parent_window, 'recording_timeout'):
+            timeout = self.parent_window.recording_timeout
+            for i in range(self.timeout_combo.count()):
+                if self.timeout_combo.itemData(i) == timeout:
+                    self.timeout_combo.setCurrentIndex(i)
                     break
 
         # Load debug mode setting
@@ -1791,6 +1811,13 @@ class SettingsDialog(QDialog):
             if selected_mode:
                 self.parent_window.recording_mode = selected_mode
                 log.info(f"SETTINGS: Applied recording mode: {selected_mode}")
+
+        # Apply recording timeout
+        if hasattr(self, 'timeout_combo'):
+            selected_timeout = self.timeout_combo.currentData()
+            if selected_timeout:
+                self.parent_window.recording_timeout = selected_timeout
+                log.info(f"SETTINGS: Applied recording timeout: {selected_timeout}s")
 
         # Apply Whisper model settings
         self.save_whisper_settings()

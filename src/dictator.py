@@ -69,6 +69,7 @@ class DictatorWindow(QMainWindow):
         # Load hotkey from config or use default
         self.current_hotkey = ["Ctrl", "Space"]  # Default
         self.recording_mode = "toggle"  # Default: toggle mode for backwards compatibility
+        self.recording_timeout = 300  # Default: 5 minutes (300 seconds)
         self.hotkey_manager = HotkeyManager(self.current_hotkey)
         self.history = []
         
@@ -984,6 +985,9 @@ class DictatorWindow(QMainWindow):
             }
         """)
         
+        # Set timeout on recorder before starting
+        self.recorder.max_recording_duration = self.recording_timeout
+
         self.recorder.start_recording(self.on_transcription_ready)
 
         # Update tray menu
@@ -1663,6 +1667,10 @@ class DictatorWindow(QMainWindow):
                 self.recording_mode = config.get('recording_mode', 'toggle')
                 log.debug(f"CONFIG: Loaded recording mode: {self.recording_mode}")
 
+                # Load recording timeout setting
+                self.recording_timeout = config.get('recording_timeout', 300)
+                log.debug(f"CONFIG: Loaded recording timeout: {self.recording_timeout}s")
+
                 # Load session management
                 self.current_session = config.get('current_session', 'Default')
                 self.current_session_history = config.get('current_session_history', [])
@@ -1807,6 +1815,7 @@ class DictatorWindow(QMainWindow):
                 'window_opacity': self.current_opacity_percent,
                 'hotkey_combination': self.current_hotkey,
                 'recording_mode': getattr(self, 'recording_mode', 'toggle'),
+                'recording_timeout': getattr(self, 'recording_timeout', 300),
                 'current_session': self.current_session,
                 'current_session_history': self.current_session_history,
                 'saved_sessions': self.saved_sessions,

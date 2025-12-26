@@ -49,6 +49,7 @@ class PureRecorder:
         self.sample_rate = 44100
         self.chunk_size = 1024
         self.supported_rates = [44100, 22050, 16000, 8000]
+        self.max_recording_duration = 300  # Default: 5 minutes
 
         # Thread pool for short-lived tasks (recording workers)
         self.thread_pool = thread_pool
@@ -567,8 +568,8 @@ class PureRecorder:
                             with self.audio_level_lock:
                                 self.current_audio_level = 25
                         
-                        if elapsed > 300:  # 5 minute safety limit
-                            log.debug(" WHISPER_RECORD: Maximum recording time reached")
+                        if elapsed > self.max_recording_duration:
+                            log.debug(f" WHISPER_RECORD: Maximum recording time reached ({self.max_recording_duration}s)")
                             break
                     
                     # Stop the subprocess
