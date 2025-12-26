@@ -1654,7 +1654,7 @@ class DictatorWindow(QMainWindow):
                 f"• File permissions on the config directory\n"
                 f"• You have write access to {self.config_path.parent}"
             )
-        except json.JSONEncodeError as e:
+        except (TypeError, ValueError) as e:
             log.error(f"Error encoding config to JSON: {e}")
             self.show_error_dialog(
                 "Configuration Save Error",
