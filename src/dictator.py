@@ -254,7 +254,8 @@ class DictatorWindow(QMainWindow):
             }
         """)
         settings_btn.clicked.connect(self.toggle_settings)
-        
+        settings_btn.setToolTip("Open settings to configure microphone, model, language, and appearance")
+
         # Minimize button
         minimize_btn = QPushButton("−")
         minimize_btn.setFixedSize(30, 30)
@@ -271,7 +272,8 @@ class DictatorWindow(QMainWindow):
             }
         """)
         minimize_btn.clicked.connect(self.hide_to_tray)
-        
+        minimize_btn.setToolTip("Minimize to system tray")
+
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(30, 30)
         close_btn.setStyleSheet("""
@@ -287,7 +289,8 @@ class DictatorWindow(QMainWindow):
             }
         """)
         close_btn.clicked.connect(self.close_application)
-        
+        close_btn.setToolTip("Close DICTATOR")
+
         header_layout.addWidget(title_label)
         header_layout.addStretch()
         header_layout.addWidget(settings_btn)
@@ -330,6 +333,7 @@ class DictatorWindow(QMainWindow):
             }
         """)
         self.record_btn.clicked.connect(self.toggle_manual_recording)
+        self.record_btn.setToolTip("Click to start/stop listening, or press Ctrl+Space")
         top_layout.addWidget(self.record_btn)
         
         # Volume meter
@@ -446,7 +450,8 @@ class DictatorWindow(QMainWindow):
             }
         """)
         self.history_toggle.clicked.connect(self.toggle_history)
-        
+        self.history_toggle.setToolTip("Show/hide transcription history")
+
         # Add top content to main layout (no stretch)
         layout.addWidget(top_content)
         

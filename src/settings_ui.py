@@ -264,6 +264,7 @@ class SettingsDialog(QDialog):
                 border: 1px solid #4CAF50;
             }
         """)
+        self.model_combo.setToolTip("Choose Whisper model size (larger = more accurate but slower)")
         whisper_layout.addRow("Model Size:", self.model_combo)
 
         # Language selection dropdown
@@ -325,6 +326,7 @@ class SettingsDialog(QDialog):
                 border: 1px solid #4CAF50;
             }
         """)
+        self.language_combo.setToolTip("Select transcription language or use auto-detect")
         whisper_layout.addRow("Language:", self.language_combo)
 
         # Model directory selection
@@ -353,6 +355,7 @@ class SettingsDialog(QDialog):
         self.device_combo = QComboBox()
         self.device_combo.addItems(['auto', 'cpu', 'cuda'])
         self.device_combo.setStyleSheet(self.model_combo.styleSheet())
+        self.device_combo.setToolTip("Choose processing device (auto, CPU, or CUDA GPU)")
         whisper_layout.addRow("Compute Device:", self.device_combo)
 
         # Model download section
@@ -380,6 +383,7 @@ class SettingsDialog(QDialog):
                 color: #999;
             }
         """)
+        self.download_model_btn.setToolTip("Download the selected Whisper model for offline use")
         download_layout.addWidget(self.download_model_btn)
 
         # Status label
