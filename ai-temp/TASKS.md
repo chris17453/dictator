@@ -65,7 +65,7 @@
 
 ### 1.4 Thread Safety
 - [x] **Audit all threading code for race conditions** - ✅ COMPLETED 2025-12-26 - Comprehensive audit identified 8 race conditions, 3 design issues (see docs/THREADING_AUDIT.md)
-- [ ] Fix critical race conditions (audio_queue, audio_data, is_monitoring)
+- [x] **Fix critical race conditions** - ✅ COMPLETED 2025-12-26 - Fixed HIGH/MEDIUM severity issues (audio_queue, monitoring, model loading) with locks and Queue (17 tests)
 - [ ] Replace queue-based UI updates with proper Qt signals/slots
 - [x] **Remove monitor thread** - ✅ COMPLETED 2025-12-24 - Removed destructive UIWatchdog that used os._exit
 - [ ] Add proper thread pool management
@@ -476,6 +476,26 @@ For EVERY feature, follow TDD cycle:
 - **Commits**: c173175 (audit documentation)
 - **Files**: docs/THREADING_AUDIT.md
 - **Next Steps**: Implement critical race condition fixes (Phase 1 of audit)
+
+**Phase 1.4: Critical Race Condition Fixes** ✅ (TDD Complete)
+- **RED**: Created 17 comprehensive threading safety tests
+- **GREEN**: Implemented thread-safe synchronization for all critical race conditions
+- **Thread Safety Infrastructure:**
+  - Added 5 locks to PureRecorder:
+    - monitoring_lock: Protects is_monitoring flag
+    - model_loading_lock: Prevents concurrent Whisper model loads
+    - subprocess_lock: Protects active_subprocess reference
+    - recording_lock: Protects recording state transitions
+    - audio_level_lock: Protects audio_data and current_audio_level
+- **Critical Fixes:**
+  - audio_queue: Replaced list with queue.Queue(maxsize=1000) - thread-safe bounded queue
+  - is_monitoring: Protected by monitoring_lock with proper check-and-set
+  - whisper_model: Protected by model_loading_lock, prevents duplicate loads
+  - Monitoring start/stop: Properly synchronized, prevents multiple threads
+- **Result**: All 17 threading tests PASS - 241 total tests passing
+- **Commits**: a8a6c59 (implementation)
+- **Files**: src/recorder.py, tests/test_threading_safety.py
+- **User Impact**: More stable under concurrent operations, no data corruption, reduced memory usage
 
 ---
 
