@@ -120,6 +120,7 @@ class DictatorWindow(QMainWindow):
         self.whisper_model_dir = str(Path.home() / ".config" / "dictator" / "models")
         self.whisper_device = "auto"  # auto, cpu, cuda
         self.whisper_language = "auto"  # auto-detect, or specific language code (en, es, fr, etc.)
+        self.custom_vocabulary = []  # User-defined words/phrases for better recognition
 
         # Debug mode setting (defaults to False)
         self.debug_mode_enabled = False
@@ -2388,6 +2389,7 @@ class DictatorWindow(QMainWindow):
                 self.whisper_model_dir = config.get('whisper_model_dir', str(Path.home() / ".config" / "dictator" / "models"))
                 self.whisper_device = config.get('whisper_device', 'auto')
                 self.whisper_language = config.get('whisper_language', 'auto')
+                self.custom_vocabulary = config.get('custom_vocabulary', [])
 
                 # Pass Whisper settings to recorder
                 if hasattr(self.recorder, 'whisper_model_size'):
@@ -2395,6 +2397,7 @@ class DictatorWindow(QMainWindow):
                     self.recorder.whisper_model_dir = self.whisper_model_dir
                     self.recorder.whisper_device = self.whisper_device
                     self.recorder.whisper_language = self.whisper_language
+                    self.recorder.custom_vocabulary = self.custom_vocabulary
 
                 # Load debug mode setting and apply log level
                 self.debug_mode_enabled = config.get('debug_mode_enabled', False)
@@ -2494,7 +2497,66 @@ class DictatorWindow(QMainWindow):
         )
 
         return None
-    
+
+    # Custom Vocabulary Management Methods
+
+    def add_vocabulary_term(self, term):
+        """Add a term to custom vocabulary.
+
+        Args:
+            term: Word or phrase to add
+        """
+        # Trim whitespace
+        term = term.strip()
+
+        # Validate - don't add empty strings
+        if not term:
+            return
+
+        # Don't add duplicates
+        if term in self.custom_vocabulary:
+            return
+
+        self.custom_vocabulary.append(term)
+        log.debug(f"Added vocabulary term: '{term}'")
+
+    def remove_vocabulary_term(self, term):
+        """Remove a term from custom vocabulary.
+
+        Args:
+            term: Word or phrase to remove
+        """
+        if term in self.custom_vocabulary:
+            self.custom_vocabulary.remove(term)
+            log.debug(f"Removed vocabulary term: '{term}'")
+
+    def import_vocabulary_from_text(self, text):
+        """Import vocabulary from newline-separated text.
+
+        Args:
+            text: Newline-separated list of terms
+        """
+        lines = text.strip().split('\n')
+        for line in lines:
+            self.add_vocabulary_term(line)
+        log.info(f"Imported {len(lines)} vocabulary terms")
+
+    def export_vocabulary_to_text(self):
+        """Export vocabulary as newline-separated text.
+
+        Returns:
+            str: Newline-separated vocabulary terms
+        """
+        return '\n'.join(self.custom_vocabulary)
+
+    def get_sorted_vocabulary(self):
+        """Get vocabulary sorted alphabetically.
+
+        Returns:
+            list: Sorted vocabulary list
+        """
+        return sorted(self.custom_vocabulary)
+
     def save_config(self):
         """Save configuration with atomic writes and backup."""
         try:
@@ -2531,6 +2593,7 @@ class DictatorWindow(QMainWindow):
                 'whisper_model_dir': getattr(self, 'whisper_model_dir', str(Path.home() / ".config" / "dictator" / "models")),
                 'whisper_device': getattr(self, 'whisper_device', 'auto'),
                 'whisper_language': getattr(self, 'whisper_language', 'auto'),
+                'custom_vocabulary': getattr(self, 'custom_vocabulary', []),
                 'debug_mode_enabled': getattr(self, 'debug_mode_enabled', False),
                 'silence_detection_enabled': getattr(self, 'silence_detection_enabled', False),
                 'silence_threshold': getattr(self, 'silence_threshold', 5),

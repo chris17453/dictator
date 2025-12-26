@@ -61,6 +61,9 @@ class PureRecorder:
         # Confidence score tracking
         self.last_confidence_score = None  # Stores confidence (0-100) from last transcription
 
+        # Custom vocabulary for better recognition
+        self.custom_vocabulary = []  # User-defined words/phrases
+
         # Thread pool for short-lived tasks (recording workers)
         self.thread_pool = thread_pool
 
@@ -430,6 +433,25 @@ class PureRecorder:
         # Round to integer
         return int(round(confidence))
 
+    def get_vocabulary_prompt(self):
+        """Generate initial prompt from custom vocabulary for Whisper.
+
+        Whisper can use an initial_prompt parameter to guide transcription
+        with specific terminology. This helps it recognize custom words.
+
+        Returns:
+            str: Prompt containing vocabulary terms, or None if no vocabulary
+        """
+        if not self.custom_vocabulary:
+            return None
+
+        # Join vocabulary with commas for natural prompt
+        # Format: "Technical terms: PyQt6, Whisper, DICTATOR, API, JSON"
+        vocab_text = ", ".join(self.custom_vocabulary)
+        prompt = f"Technical terms and names: {vocab_text}"
+
+        return prompt
+
     def preview_audio(self):
         """Play back the recorded audio for preview before transcription."""
         try:
@@ -516,7 +538,16 @@ class PureRecorder:
                 language_param = None if self.whisper_language == 'auto' else self.whisper_language
                 log.debug(f"WHISPER: Using language: {self.whisper_language} (param: {language_param})")
 
-                segments, info = self.whisper_model.transcribe(audio_float, language=language_param)
+                # Get vocabulary prompt for better recognition
+                vocab_prompt = self.get_vocabulary_prompt()
+                if vocab_prompt:
+                    log.debug(f"WHISPER: Using vocabulary prompt: {vocab_prompt}")
+
+                segments, info = self.whisper_model.transcribe(
+                    audio_float,
+                    language=language_param,
+                    initial_prompt=vocab_prompt
+                )
 
                 # Progress: Finalizing
                 if self.progress_callback:
@@ -854,7 +885,16 @@ class PureRecorder:
                     language_param = None if self.whisper_language == 'auto' else self.whisper_language
                     log.debug(f"WHISPER: Using language: {self.whisper_language} (param: {language_param})")
 
-                    segments, info = self.whisper_model.transcribe(audio_float, language=language_param)
+                    # Get vocabulary prompt for better recognition
+                    vocab_prompt = self.get_vocabulary_prompt()
+                    if vocab_prompt:
+                        log.debug(f"WHISPER: Using vocabulary prompt: {vocab_prompt}")
+
+                    segments, info = self.whisper_model.transcribe(
+                        audio_float,
+                        language=language_param,
+                        initial_prompt=vocab_prompt
+                    )
                     log.debug(" WHISPER: Transcription completed, processing segments...")
                     
                     text = "".join([segment.text for segment in segments]).strip()

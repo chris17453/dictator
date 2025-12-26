@@ -379,6 +379,44 @@ class SettingsDialog(QDialog):
         self.confidence_threshold_spin.setToolTip("Show warning when transcription confidence falls below this threshold (0-100%)")
         whisper_layout.addRow("Low Confidence Threshold:", self.confidence_threshold_spin)
 
+        # Custom vocabulary section
+        vocab_label = QLabel("Custom Vocabulary:")
+        vocab_label.setToolTip("Add custom words/phrases to improve recognition accuracy")
+        self.vocabulary_input = QLineEdit()
+        self.vocabulary_input.setPlaceholderText("Enter word or phrase...")
+        self.vocabulary_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+            }
+        """)
+
+        vocab_add_btn = QPushButton("Add")
+        vocab_add_btn.clicked.connect(self.add_vocabulary_term_ui)
+
+        vocab_input_row = QHBoxLayout()
+        vocab_input_row.addWidget(self.vocabulary_input)
+        vocab_input_row.addWidget(vocab_add_btn)
+
+        whisper_layout.addRow(vocab_label, vocab_input_row)
+
+        # Vocabulary display list
+        from PyQt6.QtWidgets import QListWidget
+        self.vocabulary_list = QListWidget()
+        self.vocabulary_list.setMaximumHeight(100)
+        self.vocabulary_list.setStyleSheet("""
+            QListWidget {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+            }
+        """)
+        whisper_layout.addRow("", self.vocabulary_list)
+
         # Model download section
         download_container = QWidget()
         download_layout = QVBoxLayout(download_container)
@@ -771,7 +809,10 @@ class SettingsDialog(QDialog):
         
         # Load current settings
         self.load_current_settings()
-        
+
+        # Load vocabulary into list
+        self.refresh_vocabulary_list()
+
         # Initial microphone refresh
         QTimer.singleShot(100, self.refresh_microphones)
     
@@ -956,6 +997,23 @@ class SettingsDialog(QDialog):
 
         if directory:
             self.model_dir_input.setText(directory)
+
+    def add_vocabulary_term_ui(self):
+        """Add vocabulary term from UI input"""
+        term = self.vocabulary_input.text().strip()
+        if term and self.parent_window:
+            self.parent_window.add_vocabulary_term(term)
+            self.vocabulary_input.clear()
+            self.refresh_vocabulary_list()
+
+    def refresh_vocabulary_list(self):
+        """Refresh the vocabulary list display"""
+        if not self.parent_window:
+            return
+
+        self.vocabulary_list.clear()
+        for term in self.parent_window.custom_vocabulary:
+            self.vocabulary_list.addItem(term)
 
     def download_whisper_model(self):
         """Download the selected Whisper model"""

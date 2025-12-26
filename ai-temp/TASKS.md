@@ -92,7 +92,7 @@
 - [x] **Add confidence scores** - ✅ COMPLETED 2025-12-26 - Extract confidence from Whisper logprob, display with color-coded UI indicator, configurable threshold (25 tests)
 - [x] **Add model selection in UI** - ✅ COMPLETED 2025-12-26 - Choose tiny/base/small/medium models, auto-reload on change (11 tests)
 - [x] **Add language selection** - ✅ COMPLETED 2025-12-26 - Support 20 languages + auto-detect, persists in config (12 tests)
-- [ ] **Add custom vocabulary** - User-defined words/phrases
+- [x] **Add custom vocabulary** - ✅ COMPLETED 2025-12-26 - User-defined words/phrases passed as initial_prompt to Whisper for better recognition (23 tests)
 - [ ] **Add punctuation options** - Auto-capitalization, punctuation rules
 
 ### 2.3 Output & Text Handling
