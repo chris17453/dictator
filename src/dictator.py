@@ -86,6 +86,9 @@ class DictatorWindow(QMainWindow):
         self.whisper_model_dir = str(Path.home() / ".config" / "dictator" / "models")
         self.whisper_device = "auto"  # auto, cpu, cuda
 
+        # Debug mode setting (defaults to False)
+        self.debug_mode_enabled = False
+
         self.config_path = Path.home() / ".config" / "dictator" / "config.json"
         self.settings_visible = False
         
@@ -1517,6 +1520,16 @@ class DictatorWindow(QMainWindow):
                     self.recorder.whisper_model_dir = self.whisper_model_dir
                     self.recorder.whisper_device = self.whisper_device
 
+                # Load debug mode setting and apply log level
+                self.debug_mode_enabled = config.get('debug_mode_enabled', False)
+                from src import logger
+                if self.debug_mode_enabled:
+                    logger.set_log_level('DEBUG')
+                    log.info("CONFIG: Debug mode enabled - log level set to DEBUG")
+                else:
+                    logger.set_log_level('INFO')
+                    log.info("CONFIG: Debug mode disabled - log level set to INFO")
+
                 log.debug(f"CONFIG: Loaded Whisper settings - Model: {self.whisper_model_size}, Dir: {self.whisper_model_dir}, Device: {self.whisper_device}")
                 log.debug(f"CONFIG: Loaded colors - BG: {self.custom_bg_color}, Border: {self.custom_border_color}, Text: {self.custom_text_color}, Button: {self.custom_button_color}")
                 log.debug(f"CONFIG: Loaded translation colors - BG: {self.custom_translation_bg_color}, Text: {self.custom_translation_text_color}")
@@ -1632,7 +1645,8 @@ class DictatorWindow(QMainWindow):
                 'custom_history_font_size': getattr(self, 'custom_history_font_size', 12),
                 'whisper_model_size': getattr(self, 'whisper_model_size', 'tiny'),
                 'whisper_model_dir': getattr(self, 'whisper_model_dir', str(Path.home() / ".config" / "dictator" / "models")),
-                'whisper_device': getattr(self, 'whisper_device', 'auto')
+                'whisper_device': getattr(self, 'whisper_device', 'auto'),
+                'debug_mode_enabled': getattr(self, 'debug_mode_enabled', False)
             }
 
             # Validate config is a dict
