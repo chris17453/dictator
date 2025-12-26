@@ -73,7 +73,7 @@
 
 ---
 
-**🎉 PHASE 1 COMPLETE! All critical fixes and stability improvements done. 288 tests passing.**
+**🎉 PHASE 1 COMPLETE! All critical fixes and stability improvements done. 301 tests passing.**
 
 ---
 
@@ -91,7 +91,7 @@
 - [ ] **Show transcription progress** - Progress bar during Whisper processing
 - [ ] **Add confidence scores** - Display confidence for transcription
 - [x] **Add model selection in UI** - ✅ COMPLETED 2025-12-26 - Choose tiny/base/small/medium models, auto-reload on change (11 tests)
-- [ ] **Add language selection** - Support multiple languages
+- [x] **Add language selection** - ✅ COMPLETED 2025-12-26 - Support 20 languages + auto-detect, persists in config (12 tests)
 - [ ] **Add custom vocabulary** - User-defined words/phrases
 - [ ] **Add punctuation options** - Auto-capitalization, punctuation rules
 
