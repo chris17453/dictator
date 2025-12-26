@@ -231,11 +231,13 @@ class DictatorWindow(QMainWindow):
         # Create main layout with proper spacing control
         layout = QVBoxLayout()
         layout.setContentsMargins(15, 15, 15, 15)
-        
+        layout.setSpacing(12)  # Add spacing between major sections
+
         # Create top content area that won't stretch
         top_content = QWidget()
         top_layout = QVBoxLayout(top_content)
-        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setContentsMargins(8, 8, 8, 8)  # Add some padding
+        top_layout.setSpacing(10)  # Add spacing between elements
         
         # Header - draggable title area with futuristic glass styling
         title_frame = DraggableFrame(self)
@@ -254,6 +256,7 @@ class DictatorWindow(QMainWindow):
         
         header_layout = QHBoxLayout(title_frame)
         header_layout.setContentsMargins(10, 5, 10, 5)
+        header_layout.setSpacing(8)  # Add spacing between header buttons
         
         title_label = QLabel("🎤 DICTATOR")
         title_label.setStyleSheet("""
@@ -480,8 +483,8 @@ class DictatorWindow(QMainWindow):
         # Preview controls (shown after recording, before transcription)
         self.preview_controls = QWidget()
         preview_layout = QHBoxLayout(self.preview_controls)
-        preview_layout.setContentsMargins(0, 0, 0, 0)
-        preview_layout.setSpacing(8)
+        preview_layout.setContentsMargins(0, 8, 0, 8)  # Add top/bottom margins
+        preview_layout.setSpacing(10)  # More spacing between buttons
 
         self.preview_btn = QPushButton("🔊 Play Preview")
         self.preview_btn.setStyleSheet("""
@@ -590,6 +593,7 @@ class DictatorWindow(QMainWindow):
         
         volume_layout = QHBoxLayout()
         volume_layout.setContentsMargins(10, 6, 10, 6)
+        volume_layout.setSpacing(2)  # Add spacing between volume bars
         
         # Just the volume bars - no "LEVEL:" text
         
@@ -813,11 +817,13 @@ class DictatorWindow(QMainWindow):
         self.history_widget = QWidget()
         self.history_layout = QVBoxLayout()
         self.history_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.history_layout.setContentsMargins(8, 8, 8, 8)  # Add margins inside scroll area
+        self.history_layout.setSpacing(8)  # Add spacing between history items
         self.history_widget.setLayout(self.history_layout)
-        
+
         self.history_scroll.setWidget(self.history_widget)
         self.history_scroll.setWidgetResizable(True)
-        self.history_scroll.setMinimumHeight(100)  # Set minimum instead of fixed
+        self.history_scroll.setMinimumHeight(120)  # Increase minimum height
         self.history_collapsed = False
         
         # Add history scroll area with stretch factor to fill remaining space
@@ -832,8 +838,8 @@ class DictatorWindow(QMainWindow):
         # Add resize grips in corners
         self.add_resize_grips()
         
-        self.resize(550, 400)
-        self.setMinimumSize(400, 300)  # Set minimum size for resizing
+        self.resize(600, 500)  # Larger default size
+        self.setMinimumSize(500, 450)  # Larger minimum to prevent UI collapse
         self.move(100, 100)
         self.show()
         self.raise_()

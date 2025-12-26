@@ -99,38 +99,13 @@ class ResizeGrip(QLabel):
             self.setCursor(Qt.CursorShape.SizeHorCursor)
             self.setFixedWidth(6)  # Edge grips - thin horizontal strip
 
-        # Visible but subtle grips with futuristic glass theme
-        if direction in ["northwest", "southeast", "northeast", "southwest"]:
-            # Corner grips - small glass squares
-            self.setStyleSheet("""
-                QLabel {
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                        stop:0 rgba(80, 200, 240, 120),
-                        stop:1 rgba(60, 180, 220, 140));
-                    border: 1px solid rgba(100, 220, 255, 140);
-                    border-radius: 4px;
-                }
-            """)
-        elif direction in ["north", "south"]:
-            # Top/bottom edge grips - horizontal glass bars
-            self.setStyleSheet("""
-                QLabel {
-                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                        stop:0 rgba(80, 200, 240, 80),
-                        stop:1 rgba(60, 180, 220, 100));
-                    border: none;
-                }
-            """)
-        elif direction in ["east", "west"]:
-            # Left/right edge grips - vertical glass bars
-            self.setStyleSheet("""
-                QLabel {
-                    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                        stop:0 rgba(80, 200, 240, 80),
-                        stop:1 rgba(60, 180, 220, 100));
-                    border: none;
-                }
-            """)
+        # Invisible resize zones - cursor shows where to grab
+        self.setStyleSheet("""
+            QLabel {
+                background-color: transparent;
+                border: none;
+            }
+        """)
     
     def mousePressEvent(self, event):
         """Start compositor-aware resize"""
