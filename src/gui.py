@@ -48,8 +48,8 @@ def set_app_icon():
                         app_icon.addFile(str(icon_path), QSize(int(size), int(size)))
                         log.debug(f"Added app icon size {size}x{size} from package")
                         icon_loaded = True
-            except:
-                pass
+            except (FileNotFoundError, AttributeError, OSError) as e:
+                log.debug(f"Could not load icon size {size}x{size} from package: {e}")
         
         # Try main icon too
         try:
@@ -58,8 +58,8 @@ def set_app_icon():
                     app_icon.addFile(str(icon_path))
                     log.debug("Added main app icon from package")
                     icon_loaded = True
-        except:
-            pass
+        except (FileNotFoundError, AttributeError, OSError) as e:
+            log.debug(f"Could not load main app icon from package: {e}")
             
     except ImportError:
         pass
@@ -159,8 +159,8 @@ def start_gui(no_tray=False):
         if window and hasattr(window, 'close_application'):
             try:
                 window.close_application()
-            except:
-                pass
+            except Exception as cleanup_error:
+                log.error(f"Error during emergency window cleanup: {cleanup_error}", exc_info=True)
 
         sys.exit(1)
 

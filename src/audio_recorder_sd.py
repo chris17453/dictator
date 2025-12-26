@@ -120,8 +120,8 @@ def record_audio_sounddevice(device_index, sample_rate, max_duration=300):
             log.error(f"SOUNDDEVICE_RECORDER: Error saving audio: {e}")
             try:
                 os.unlink(temp_path)
-            except:
-                pass
+            except (OSError, FileNotFoundError, PermissionError) as cleanup_error:
+                log.warning(f"SOUNDDEVICE_RECORDER: Could not cleanup temp file {temp_path}: {cleanup_error}")
             return None
             
     except Exception as e:
