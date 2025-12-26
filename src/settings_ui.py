@@ -799,8 +799,13 @@ class SettingsDialog(QDialog):
 
     def download_whisper_model(self):
         """Download the selected Whisper model"""
-        import threading
         from pathlib import Path
+
+        # Import thread pool from dictator module
+        try:
+            from dictator import thread_pool
+        except ImportError:
+            from .dictator import thread_pool
 
         # Get selected model and directory
         model_size = self.model_combo.currentText()
@@ -829,8 +834,8 @@ class SettingsDialog(QDialog):
         self.download_progress.setValue(0)
         self.download_progress.show()
 
-        # Download in background thread to avoid freezing UI
-        def download_thread():
+        # Download in thread pool to avoid freezing UI
+        def download_task():
             try:
                 # Import here to avoid issues if faster_whisper not installed
                 from faster_whisper import WhisperModel
@@ -871,9 +876,8 @@ class SettingsDialog(QDialog):
                 from PyQt6.QtCore import QTimer
                 QTimer.singleShot(0, lambda: self._on_download_error(str(e)))
 
-        # Start download thread
-        thread = threading.Thread(target=download_thread, daemon=True)
-        thread.start()
+        # Submit to thread pool
+        thread_pool.submit(download_task)
 
     def _on_download_complete(self, model_size):
         """Called when download completes successfully"""

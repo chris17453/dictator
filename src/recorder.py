@@ -39,7 +39,7 @@ except ImportError:
 
 
 class PureRecorder:
-    def __init__(self):
+    def __init__(self, thread_pool=None):
         log.debug("Initializing PureRecorder")
         self.is_recording = False
         self.current_microphone_index = None
@@ -47,6 +47,9 @@ class PureRecorder:
         self.sample_rate = 44100
         self.chunk_size = 1024
         self.supported_rates = [44100, 22050, 16000, 8000]
+
+        # Thread pool for short-lived tasks (recording workers)
+        self.thread_pool = thread_pool
 
         # WHISPER ONLY - no Google Speech Recognition
         self.whisper_model = None
@@ -270,9 +273,14 @@ class PureRecorder:
             log.debug(f"CALLBACK SET TO: {callback}")
 
             log.info(f"Starting recording with microphone index: {self.current_microphone_index}")
-            thread = threading.Thread(target=self._record_worker)
-            thread.daemon = True
-            thread.start()
+
+            # Use thread pool if available, otherwise fall back to creating thread
+            if self.thread_pool:
+                self.thread_pool.submit(self._record_worker)
+            else:
+                thread = threading.Thread(target=self._record_worker)
+                thread.daemon = True
+                thread.start()
 
         except Exception as e:
             log.error(f"Error starting recording: {e}")

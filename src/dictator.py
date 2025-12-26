@@ -33,6 +33,7 @@ try:
     from settings_ui import SettingsDialog
     from common_ui import ResizeGrip, DraggableFrame
     from logger import get_logger
+    from thread_pool import ThreadPoolManager
 except ImportError:
     # Handle relative imports when running as module
     from .recorder import PureRecorder
@@ -42,9 +43,14 @@ except ImportError:
     from .settings_ui import SettingsDialog
     from .common_ui import ResizeGrip, DraggableFrame
     from .logger import get_logger
+    from .thread_pool import ThreadPoolManager
 
 # Initialize logger
 log = get_logger(__name__)
+
+# Global thread pool for short-lived background tasks
+# Shared across all components to prevent unlimited thread creation
+thread_pool = ThreadPoolManager(max_workers=4)
 
 
 class DictatorWindow(QMainWindow):
@@ -59,7 +65,7 @@ class DictatorWindow(QMainWindow):
     def __init__(self, no_tray=False):
         super().__init__()
         log.info("Initializing DICTATOR window")
-        self.recorder = PureRecorder()
+        self.recorder = PureRecorder(thread_pool=thread_pool)
         # Load hotkey from config or use default
         self.current_hotkey = ["Ctrl", "Space"]  # Default
         self.hotkey_manager = HotkeyManager(self.current_hotkey)
@@ -1385,6 +1391,10 @@ class DictatorWindow(QMainWindow):
             self.save_config()
         except Exception as e:
             log.warning(f"Could not save config during shutdown: {e}")
+
+        # Shutdown thread pool (wait for tasks to complete)
+        log.info("Shutting down thread pool...")
+        thread_pool.shutdown(wait=True)
 
         # Use proper Qt shutdown instead of force exit
         log.info("Shutting down gracefully")
