@@ -146,7 +146,7 @@ class TestSignalConnections:
             window.transcriptionComplete.connect(test_slot)
 
             # Emit signal
-            window.transcriptionComplete.emit("Test text", "en")
+            window.transcriptionComplete.emit("Test text", "en", None)
 
             # Process Qt events to ensure signal is delivered
             qapp.processEvents()
@@ -194,7 +194,7 @@ class TestSignalConnections:
                 received_args.append(text)
 
             window.addHistoryItem.connect(test_slot)
-            window.addHistoryItem.emit("Test item")
+            window.addHistoryItem.emit("Test item", None)
             qapp.processEvents()
 
             assert len(received_args) == 1
@@ -223,7 +223,7 @@ class TestThreadSafeSignalEmission:
 
             # Emit from background thread
             def background_emit():
-                window.transcriptionComplete.emit("BG Test", "en")
+                window.transcriptionComplete.emit("BG Test", "en", None)
 
             thread = threading.Thread(target=background_emit)
             thread.start()
@@ -419,7 +419,7 @@ class TestErrorHandling:
             with patch.object(window, '_safe_handle_transcription', bad_handler):
                 # Should not crash when emitting
                 try:
-                    window.transcriptionComplete.emit("Test", "en")
+                    window.transcriptionComplete.emit("Test", "en", None)
                     qapp.processEvents()
                     # If we get here, Qt handled the exception
                     assert True
