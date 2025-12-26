@@ -314,9 +314,6 @@ class PureRecorder:
             if self.is_monitoring:
                 return
 
-            # Ensure any previous monitoring is stopped first
-            self.stop_monitoring()
-
             self.is_monitoring = True
 
         # Start thread outside lock to avoid deadlock
