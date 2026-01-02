@@ -9,11 +9,12 @@ try:
 except ImportError:
     # Fallback for Python < 3.9
     import importlib_resources as pkg_resources
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout, 
-                            QWidget, QLabel, QPushButton, QScrollArea, QFrame, 
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QVBoxLayout, QHBoxLayout,
+                            QWidget, QLabel, QPushButton, QScrollArea, QFrame,
                             QComboBox, QGroupBox, QCheckBox, QProgressBar, QTextEdit,
                             QSystemTrayIcon, QMenu, QDialog, QDialogButtonBox, QSlider,
-                            QTabWidget, QSpinBox, QFormLayout, QLineEdit, QFileDialog, QMessageBox, QColorDialog)
+                            QTabWidget, QSpinBox, QFormLayout, QLineEdit, QFileDialog, QMessageBox, QColorDialog,
+                            QSizePolicy)
 from PyQt6.QtCore import Qt, pyqtSignal, QTimer, QPoint, QDateTime, QSize
 from PyQt6.QtGui import QFont, QPalette, QColor, QClipboard, QIcon, QAction
 import numpy as np
@@ -23,6 +24,7 @@ import signal
 import time
 import queue
 import subprocess
+import platformdirs
 
 # Import our separated classes
 try:
@@ -77,6 +79,11 @@ class DictatorWindow(QMainWindow):
         self.hotkey_manager = HotkeyManager(self.current_hotkey)
         self.history = []
 
+        # Audio history directory
+        self.audio_history_dir = platformdirs.user_data_dir("dictator", "dictator") + "/audio_history"
+        Path(self.audio_history_dir).mkdir(parents=True, exist_ok=True)
+        log.info(f"Audio history directory: {self.audio_history_dir}")
+
         # Audio quality monitoring
         self.audio_quality_state = 'good'  # 'good', 'too_quiet', or 'too_loud'
         self.audio_too_quiet_threshold = 10  # Below 10% is too quiet
@@ -121,6 +128,7 @@ class DictatorWindow(QMainWindow):
         self.whisper_device = "auto"  # auto, cpu, cuda
         self.whisper_language = "auto"  # auto-detect, or specific language code (en, es, fr, etc.)
         self.custom_vocabulary = []  # User-defined words/phrases for better recognition
+        self.sample_rate = "auto"  # Sample rate for recording: "auto", 16000, 44100, 48000, etc.
 
         # Debug mode setting (defaults to False)
         self.debug_mode_enabled = False
@@ -164,9 +172,17 @@ class DictatorWindow(QMainWindow):
         # Connect status update callback
         self.recorder.update_status_callback = self.update_status_label
 
-        # Connect model loading callbacks
+        # Connect model loading callbacks BEFORE checking model status
         self.recorder.model_loading_started_callback = self._on_model_loading_started
         self.recorder.model_loading_complete_callback = self._on_model_loading_complete
+
+        # Check actual Whisper model status and update UI accordingly
+        if self.recorder.whisper_model:
+            log.info("Whisper model already loaded")
+            self._on_model_loading_complete()
+        else:
+            log.info("Whisper model not loaded yet")
+            # Status will be updated by callbacks when model loads
 
         # Start hotkey manager
         self.hotkey_manager.start(self.toggle_recording)
@@ -191,6 +207,8 @@ class DictatorWindow(QMainWindow):
         msg_box.setWindowTitle(title)
         msg_box.setText(message)
         msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        # Make dialog wider for long error messages
+        msg_box.setStyleSheet("QLabel{min-width: 500px;}")
 
         # Use non-blocking show() in tests to prevent blocking
         if 'pytest' in sys.modules:
@@ -240,45 +258,44 @@ class DictatorWindow(QMainWindow):
         layout = QVBoxLayout()
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(12)  # Add spacing between major sections
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)  # Align to top, no overlap
 
-        # Create top content area that won't stretch
+        # Create top content area that won't stretch vertically
         top_content = QWidget()
         top_layout = QVBoxLayout(top_content)
         top_layout.setContentsMargins(8, 8, 8, 8)  # Add some padding
         top_layout.setSpacing(10)  # Add spacing between elements
+        # Don't set size constraint - let it expand horizontally but not vertically
         
         # Header - draggable title area with futuristic glass styling
         title_frame = DraggableFrame(self)
-        title_frame.setFixedHeight(50)
+        title_frame.setFixedHeight(60)
         title_frame.setStyleSheet("""
             QFrame {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 rgba(30, 60, 100, 120),
-                    stop:0.5 rgba(40, 70, 110, 100),
-                    stop:1 rgba(30, 60, 100, 120));
-                border: 1px solid rgba(100, 180, 255, 60);
-                border-radius: 16px;
+                background: transparent;
+                border: none;
                 margin: 3px;
             }
         """)
-        
+
         header_layout = QHBoxLayout(title_frame)
-        header_layout.setContentsMargins(10, 5, 10, 5)
+        header_layout.setContentsMargins(12, -10, 12, 8)
         header_layout.setSpacing(8)  # Add spacing between header buttons
-        
+
         title_label = QLabel("🎤 DICTATOR")
         title_label.setStyleSheet("""
             color: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                 stop:0 #60D0FF,
                 stop:0.5 #A0E0FF,
                 stop:1 #60D0FF);
-            font-size: 22px;
+            font-size: 20px;
             font-weight: bold;
-            padding: 5px;
+            padding: 3px;
         """)
+        title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         
         settings_btn = QPushButton("⚙")
-        settings_btn.setFixedSize(36, 36)
+        settings_btn.setFixedSize(32, 32)
         settings_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -286,7 +303,7 @@ class DictatorWindow(QMainWindow):
                     stop:1 rgba(40, 100, 160, 100));
                 color: rgba(200, 230, 255, 255);
                 border: 1px solid rgba(100, 180, 255, 80);
-                border-radius: 18px;
+                border-radius: 16px;
                 font-size: 17px;
             }
             QPushButton:hover {
@@ -306,7 +323,7 @@ class DictatorWindow(QMainWindow):
 
         # Help button
         help_btn = QPushButton("?")
-        help_btn.setFixedSize(36, 36)
+        help_btn.setFixedSize(32, 32)
         help_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -314,7 +331,7 @@ class DictatorWindow(QMainWindow):
                     stop:1 rgba(40, 100, 160, 100));
                 color: rgba(200, 230, 255, 255);
                 border: 1px solid rgba(100, 180, 255, 80);
-                border-radius: 18px;
+                border-radius: 16px;
                 font-size: 16px;
                 font-weight: bold;
             }
@@ -335,7 +352,7 @@ class DictatorWindow(QMainWindow):
 
         # Minimize button
         minimize_btn = QPushButton("−")
-        minimize_btn.setFixedSize(36, 36)
+        minimize_btn.setFixedSize(32, 32)
         minimize_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -343,7 +360,7 @@ class DictatorWindow(QMainWindow):
                     stop:1 rgba(60, 180, 100, 100));
                 color: rgba(220, 255, 230, 255);
                 border: 1px solid rgba(120, 220, 150, 80);
-                border-radius: 18px;
+                border-radius: 16px;
                 font-size: 18px;
             }
             QPushButton:hover {
@@ -362,7 +379,7 @@ class DictatorWindow(QMainWindow):
         minimize_btn.setToolTip("Minimize to system tray")
 
         close_btn = QPushButton("✕")
-        close_btn.setFixedSize(36, 36)
+        close_btn.setFixedSize(32, 32)
         close_btn.setStyleSheet("""
             QPushButton {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -370,7 +387,7 @@ class DictatorWindow(QMainWindow):
                     stop:1 rgba(220, 60, 60, 100));
                 color: rgba(255, 220, 220, 255);
                 border: 1px solid rgba(255, 120, 120, 80);
-                border-radius: 18px;
+                border-radius: 16px;
                 font-size: 16px;
             }
             QPushButton:hover {
@@ -394,20 +411,36 @@ class DictatorWindow(QMainWindow):
         header_layout.addWidget(settings_btn)
         header_layout.addWidget(minimize_btn)
         header_layout.addWidget(close_btn)
-        
+
+        title_frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         top_layout.addWidget(title_frame)
         
-        # Status
-        engine_status = "Whisper (loading...)"
-        self.status_label = QLabel(f"Ready - {engine_status} - Press Ctrl+Space to dictate")
+        # Status - will be updated after checking Whisper model
+        self.status_label = QLabel("Initializing...")
         self.status_label.setStyleSheet("""
             color: rgba(120, 220, 255, 255);
             font-size: 14px;
             margin: 10px 0;
             padding: 4px;
+            border: none;
+            background: transparent;
         """)
+        self.status_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         top_layout.addWidget(self.status_label)
-        
+
+        # Microphone name display
+        self.mic_label = QLabel("🎙️ No microphone selected")
+        self.mic_label.setStyleSheet("""
+            color: rgba(180, 200, 255, 220);
+            font-size: 12px;
+            margin: 4px 0;
+            padding: 2px;
+            border: none;
+            background: transparent;
+        """)
+        self.mic_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        top_layout.addWidget(self.mic_label)
+
         # Recording timer
         self.timer_label = QLabel("⏱️ 00:00")
         self.timer_label.setStyleSheet("""
@@ -419,6 +452,7 @@ class DictatorWindow(QMainWindow):
         """)
         self.timer_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.timer_label.hide()  # Initially hidden
+        self.timer_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         top_layout.addWidget(self.timer_label)
         
         # Manual record button with futuristic glass design
@@ -436,6 +470,8 @@ class DictatorWindow(QMainWindow):
                 font-size: 16px;
                 font-weight: bold;
                 margin: 10px 0;
+                min-height: 56px;
+                max-height: 56px;
             }
             QPushButton:hover {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
@@ -454,6 +490,7 @@ class DictatorWindow(QMainWindow):
         """)
         self.record_btn.clicked.connect(self.toggle_manual_recording)
         self.record_btn.setToolTip("Click to start/stop listening, or press Ctrl+Space")
+        self.record_btn.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         top_layout.addWidget(self.record_btn)
 
         # Pause/Resume button (only visible during recording)
@@ -486,6 +523,7 @@ class DictatorWindow(QMainWindow):
         self.pause_btn.clicked.connect(self.toggle_pause)
         self.pause_btn.setToolTip("Pause/resume recording without stopping")
         self.pause_btn.hide()  # Hidden by default, shown when recording
+        self.pause_btn.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         top_layout.addWidget(self.pause_btn)
 
         # Preview controls (shown after recording, before transcription)
@@ -582,6 +620,7 @@ class DictatorWindow(QMainWindow):
         preview_layout.addWidget(self.rerecord_btn)
 
         self.preview_controls.hide()  # Hidden by default
+        self.preview_controls.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         top_layout.addWidget(self.preview_controls)
 
         # Volume meter with futuristic glass design
@@ -673,6 +712,7 @@ class DictatorWindow(QMainWindow):
             volume_layout.addWidget(bar)
         
         self.volume_frame.setLayout(volume_layout)
+        self.volume_frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         top_layout.addWidget(self.volume_frame)
         # Keep volume frame visible like SAI - always show audio levels
         self.volume_frame.show()
@@ -705,6 +745,7 @@ class DictatorWindow(QMainWindow):
             }
         """)
         self.quality_warning_label.hide()  # Hidden by default
+        self.quality_warning_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         top_layout.addWidget(self.quality_warning_label)
 
         # Transcription progress indicator
@@ -719,6 +760,7 @@ class DictatorWindow(QMainWindow):
             }
         """)
         self.progress_label.hide()  # Hidden by default
+        self.progress_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         top_layout.addWidget(self.progress_label)
 
         self.progress_bar = QProgressBar()
@@ -748,6 +790,7 @@ class DictatorWindow(QMainWindow):
             }
         """)
         self.progress_bar.hide()  # Hidden by default
+        self.progress_bar.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         top_layout.addWidget(self.progress_bar)
 
         # Confidence score indicator
@@ -768,6 +811,7 @@ class DictatorWindow(QMainWindow):
             }
         """)
         self.confidence_indicator.hide()  # Hidden by default
+        self.confidence_indicator.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         top_layout.addWidget(self.confidence_indicator)
 
         # Current transcription text area
@@ -782,6 +826,7 @@ class DictatorWindow(QMainWindow):
                 margin-top: 8px;
             }
         """)
+        current_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         top_layout.addWidget(current_label)
 
         self.current_text_area = QTextEdit()
@@ -811,8 +856,9 @@ class DictatorWindow(QMainWindow):
         
         # Make it clickable to copy
         self.current_text_area.mousePressEvent = self.copy_current_text
+        self.current_text_area.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         top_layout.addWidget(self.current_text_area)
-        
+
         # History collapsible section
         self.history_toggle = QPushButton("📜 History (0 items) ▼")
         self.history_toggle.setStyleSheet("""
@@ -846,10 +892,24 @@ class DictatorWindow(QMainWindow):
         self.history_toggle.setToolTip("Show/hide transcription history")
 
         # Add top content to main layout (no stretch)
-        layout.addWidget(top_content)
+        # Set size policy: expand horizontally, fixed vertically
+        top_content.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        # Force the container to a fixed height - lock it completely
+        def lock_top_height():
+            height = top_content.sizeHint().height()
+            top_content.setFixedHeight(height)
+            top_content.setMinimumHeight(height)
+            log.debug(f"LAYOUT: Locked top_content height to {height}px")
+        QTimer.singleShot(0, lock_top_height)
+
+        # Store reference for debugging
+        self.top_content = top_content
+
+        layout.addWidget(top_content, 0, Qt.AlignmentFlag.AlignTop)  # stretch factor = 0 (no vertical expansion)
         
-        # Add history toggle button
-        layout.addWidget(self.history_toggle)
+        # Add history toggle button (no stretch)
+        self.history_toggle.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        layout.addWidget(self.history_toggle, 0)  # stretch factor = 0 (no expansion)
         
         # History area (initially visible)
         self.history_scroll = QScrollArea()
@@ -866,9 +926,10 @@ class DictatorWindow(QMainWindow):
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 rgba(25, 35, 50, 140),
                     stop:1 rgba(20, 30, 45, 140));
-                width: 12px;
+                width: 24px;
                 border-radius: 6px;
                 border: 1px solid rgba(80, 120, 160, 80);
+                margin: 16px 0px 16px 0px;
             }
             QScrollBar::handle:vertical {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
@@ -877,11 +938,58 @@ class DictatorWindow(QMainWindow):
                 border-radius: 5px;
                 min-height: 20px;
                 border: 1px solid rgba(120, 220, 255, 120);
+                margin: 2px;
             }
             QScrollBar::handle:vertical:hover {
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                     stop:0 rgba(100, 220, 255, 180),
                     stop:1 rgba(80, 200, 240, 180));
+            }
+            QScrollBar::add-line:vertical {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(80, 200, 240, 120),
+                    stop:1 rgba(60, 180, 220, 120));
+                height: 14px;
+                subcontrol-position: bottom;
+                subcontrol-origin: margin;
+                border: 1px solid rgba(80, 120, 160, 80);
+                border-bottom-left-radius: 6px;
+                border-bottom-right-radius: 6px;
+            }
+            QScrollBar::sub-line:vertical {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(80, 200, 240, 120),
+                    stop:1 rgba(60, 180, 220, 120));
+                height: 14px;
+                subcontrol-position: top;
+                subcontrol-origin: margin;
+                border: 1px solid rgba(80, 120, 160, 80);
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+            }
+            QScrollBar::add-line:vertical:hover, QScrollBar::sub-line:vertical:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(100, 220, 255, 150),
+                    stop:1 rgba(80, 200, 240, 150));
+            }
+            QScrollBar::up-arrow:vertical {
+                border: 2px solid rgba(200, 240, 255, 200);
+                width: 3px;
+                height: 3px;
+                border-left: none;
+                border-right: none;
+                border-bottom: none;
+            }
+            QScrollBar::down-arrow:vertical {
+                border: 2px solid rgba(200, 240, 255, 200);
+                width: 3px;
+                height: 3px;
+                border-left: none;
+                border-right: none;
+                border-top: none;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: none;
             }
         """)
         
@@ -902,6 +1010,16 @@ class DictatorWindow(QMainWindow):
         
         main_widget.setLayout(layout)
         self.setCentralWidget(main_widget)
+
+        # Calculate and set minimum window height to prevent overlap
+        # Wait for layout to be ready, then set minimum height
+        def set_minimum_sizes():
+            # top_content (437) + history_toggle (~46) + history_scroll min (120) + margins (15*2) + spacing (12*3) = ~644
+            min_height = 644
+            self.setMinimumHeight(min_height)
+            main_widget.setMinimumHeight(min_height - 40)  # Account for window decorations
+            log.debug(f"LAYOUT: Set minimum window height to {min_height}px")
+        QTimer.singleShot(100, set_minimum_sizes)
         
         # Store main widget reference for dragging
         self.main_widget = main_widget
@@ -976,26 +1094,16 @@ class DictatorWindow(QMainWindow):
         log.debug(f"OPACITY: Updated window alpha to {alpha} ({opacity_percent}%) with custom colors")
     
     def apply_custom_colors(self):
-        """Apply custom colors to all UI components
-
-        NOTE: Currently disabled to preserve the futuristic gradient theme.
-        The custom colors are stored in config but not applied to UI elements
-        to maintain the glass-morphism design.
-        """
+        """Apply custom colors to all UI components"""
         if not hasattr(self, 'main_widget'):
             return
 
-        # Store custom colors but don't apply them (preserving gradient theme)
-        # Get custom colors with fallbacks
+        # Get custom colors with fallbacks to default futuristic theme
         bg_color = getattr(self, 'custom_bg_color', '#0f1928')
         border_color = getattr(self, 'custom_border_color', '#50dcf0')
         text_color = getattr(self, 'custom_text_color', '#f0faff')
         button_color = getattr(self, 'custom_button_color', '#50dcf0')
 
-        # Return early to preserve futuristic gradient theme
-        # Custom color functionality disabled in favor of glass-morphism design
-        return
-        
         # Apply custom colors to main widget background
         alpha = int((self.current_opacity_percent / 100.0) * 255)
         bg_rgb = QColor(bg_color)
@@ -1150,16 +1258,58 @@ class DictatorWindow(QMainWindow):
                 }}
                 QScrollBar:vertical {{
                     background-color: rgba({hist_bg_rgba.red()}, {hist_bg_rgba.green()}, {hist_bg_rgba.blue()}, 120);
-                    width: 12px;
+                    width: 24px;
                     border-radius: 6px;
+                    margin: 16px 0px 16px 0px;
                 }}
                 QScrollBar::handle:vertical {{
                     background-color: {button_color};
                     border-radius: 6px;
                     min-height: 20px;
+                    margin: 2px;
                 }}
                 QScrollBar::handle:vertical:hover {{
                     background-color: {border_color};
+                }}
+                QScrollBar::add-line:vertical {{
+                    background-color: rgba({button_rgb.red()}, {button_rgb.green()}, {button_rgb.blue()}, 120);
+                    height: 14px;
+                    subcontrol-position: bottom;
+                    subcontrol-origin: margin;
+                    border: 1px solid rgba({hist_bg_rgba.red()}, {hist_bg_rgba.green()}, {hist_bg_rgba.blue()}, 80);
+                    border-bottom-left-radius: 6px;
+                    border-bottom-right-radius: 6px;
+                }}
+                QScrollBar::sub-line:vertical {{
+                    background-color: rgba({button_rgb.red()}, {button_rgb.green()}, {button_rgb.blue()}, 120);
+                    height: 14px;
+                    subcontrol-position: top;
+                    subcontrol-origin: margin;
+                    border: 1px solid rgba({hist_bg_rgba.red()}, {hist_bg_rgba.green()}, {hist_bg_rgba.blue()}, 80);
+                    border-top-left-radius: 6px;
+                    border-top-right-radius: 6px;
+                }}
+                QScrollBar::add-line:vertical:hover, QScrollBar::sub-line:vertical:hover {{
+                    background-color: {border_color};
+                }}
+                QScrollBar::up-arrow:vertical {{
+                    border: 2px solid {text_color};
+                    width: 3px;
+                    height: 3px;
+                    border-left: none;
+                    border-right: none;
+                    border-bottom: none;
+                }}
+                QScrollBar::down-arrow:vertical {{
+                    border: 2px solid {text_color};
+                    width: 3px;
+                    height: 3px;
+                    border-left: none;
+                    border-right: none;
+                    border-top: none;
+                }}
+                QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+                    background: none;
                 }}
             """)
         
@@ -1807,13 +1957,43 @@ class DictatorWindow(QMainWindow):
         log.debug(f"SAFE_ADD_HISTORY_ITEM: '{text}' (confidence={confidence})")
 
         try:
+            # Save audio file to history if available
+            audio_file_path = None
+            if hasattr(self.recorder, 'last_recorded_audio_path') and self.recorder.last_recorded_audio_path:
+                try:
+                    from datetime import datetime
+                    import shutil
+
+                    # Create filename with timestamp
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    sample_rate = getattr(self.recorder, 'last_recorded_sample_rate', 48000)
+                    audio_filename = f"audio_{timestamp}_{sample_rate}Hz.raw"
+                    audio_file_path = str(Path(self.audio_history_dir) / audio_filename)
+
+                    # Move temp file to audio history
+                    shutil.move(self.recorder.last_recorded_audio_path, audio_file_path)
+                    log.info(f"AUDIO_HISTORY: Saved audio to {audio_file_path}")
+
+                    # Clear the temp path
+                    self.recorder.last_recorded_audio_path = None
+                except Exception as e:
+                    log.error(f"AUDIO_HISTORY: Failed to save audio file: {e}")
+                    # Try to clean up temp file
+                    if hasattr(self.recorder, 'last_recorded_audio_path') and self.recorder.last_recorded_audio_path:
+                        try:
+                            import os
+                            os.unlink(self.recorder.last_recorded_audio_path)
+                        except Exception:
+                            pass
+
             log.debug(" Adding to history list...")
             # Store history item with session metadata and confidence
             history_item = {
                 'text': text,
                 'session': self.current_session,
                 'timestamp': QDateTime.currentDateTime().toString(),
-                'confidence': confidence
+                'confidence': confidence,
+                'audio_file': audio_file_path  # Store audio file path
             }
             self.history.append(history_item)
             
@@ -2188,6 +2368,16 @@ class DictatorWindow(QMainWindow):
     def update_status_label(self, text):
         self.status_label.setText(text)
 
+    def update_microphone_label(self):
+        """Update the microphone label to show the current selected microphone."""
+        if hasattr(self, 'mic_label'):
+            current_mic = self.recorder.get_current_microphone()
+            if current_mic:
+                mic_name = current_mic.get('name', 'Unknown')
+                self.mic_label.setText(f"🎙️ {mic_name}")
+            else:
+                self.mic_label.setText("🎙️ No microphone selected")
+
     def get_mode_description(self, mode):
         """Get user-friendly description of recording mode."""
         if mode == "push-to-talk":
@@ -2354,6 +2544,11 @@ class DictatorWindow(QMainWindow):
                 self.hotkey_manager.set_hotkey(saved_hotkey)
                 log.debug(f"CONFIG: Loaded hotkey: {self.hotkey_manager.get_hotkey_string()}")
 
+                # Load sample rate setting
+                self.sample_rate = config.get('sample_rate', 'auto')
+                self.recorder.configured_sample_rate = self.sample_rate
+                log.debug(f"CONFIG: Loaded sample rate: {self.sample_rate}")
+
                 # Load recording mode setting
                 self.recording_mode = config.get('recording_mode', 'toggle')
                 log.debug(f"CONFIG: Loaded recording mode: {self.recording_mode}")
@@ -2423,6 +2618,9 @@ class DictatorWindow(QMainWindow):
 
                 # Apply custom colors to UI
                 self.apply_custom_colors()
+
+                # Update microphone label to show current selection
+                self.update_microphone_label()
 
                 for item in self.history:
                     # Handle both old format (string) and new format (dict)
@@ -2572,6 +2770,7 @@ class DictatorWindow(QMainWindow):
                 'always_on_top': self.always_on_top,
                 'window_opacity': self.current_opacity_percent,
                 'hotkey_combination': self.current_hotkey,
+                'sample_rate': getattr(self, 'sample_rate', 'auto'),
                 'recording_mode': getattr(self, 'recording_mode', 'toggle'),
                 'recording_timeout': getattr(self, 'recording_timeout', 300),
                 'current_session': self.current_session,
@@ -2777,6 +2976,15 @@ class DictatorWindow(QMainWindow):
     def resizeEvent(self, event):
         """Update resize grip positions when window is resized"""
         super().resizeEvent(event)
+
+        # Minimal logging - only log every 10th resize to reduce overhead
+        if not hasattr(self, '_resize_count'):
+            self._resize_count = 0
+        self._resize_count += 1
+
+        if self._resize_count % 10 == 0 and hasattr(self, 'top_content'):
+            log.debug(f"RESIZE: Window size: {self.size()}, top_content: {self.top_content.geometry()}")
+
         if hasattr(self, 'bottom_right_grip'):
             grip_size = 20  # Corner grip size
             edge_size = 6   # Edge grip thickness

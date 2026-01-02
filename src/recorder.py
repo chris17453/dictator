@@ -21,13 +21,40 @@ except ImportError:
 log = get_logger(__name__)
 
 # Try to import Whisper for local speech recognition
+# Set CT2_USE_EXPERIMENTAL_PACKED_GEMM=0 to avoid potential cuDNN issues
+os.environ.setdefault('CT2_USE_EXPERIMENTAL_PACKED_GEMM', '0')
+
+# Check if cuDNN is available before trying to use CUDA
+def check_cudnn_available():
+    """Check if cuDNN libraries are available"""
+    try:
+        import ctypes
+        import ctypes.util
+        # Try to find cuDNN library
+        cudnn_lib = ctypes.util.find_library('cudnn')
+        if cudnn_lib:
+            log.info("cuDNN library found - CUDA acceleration available")
+            return True
+        else:
+            log.warning("cuDNN library not found - will use CPU mode")
+            return False
+    except Exception as e:
+        log.warning(f"Error checking cuDNN: {e} - will use CPU mode")
+        return False
+
+# Force CPU mode if cuDNN is not available to prevent CTranslate2 crashes
+if not check_cudnn_available():
+    log.info("Setting CUDA_VISIBLE_DEVICES=-1 to force CPU mode")
+    os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
 try:
     from faster_whisper import WhisperModel
     WHISPER_AVAILABLE = True
     log.info("Whisper available - using local speech recognition")
-except ImportError:
+except Exception as e:
     WHISPER_AVAILABLE = False
-    log.warning("Whisper not available - using Google Speech Recognition")
+    log.warning(f"Whisper not available: {e}")
+    log.info("Will use Google Speech Recognition as fallback")
 
 try:
     import sounddevice as sd
@@ -47,6 +74,7 @@ class PureRecorder:
         self.audio_data = []
         self.audio_segments = []  # List of temp file paths for pause/resume
         self.sample_rate = 44100
+        self.configured_sample_rate = "auto"  # Can be "auto" or a specific rate like 16000, 44100, 48000
 
         # Preview functionality
         self.preview_audio_data = None  # Stores recorded audio for preview
@@ -54,6 +82,10 @@ class PureRecorder:
         self.chunk_size = 1024
         self.supported_rates = [44100, 22050, 16000, 8000]
         self.max_recording_duration = 300  # Default: 5 minutes
+
+        # Audio history - stores path to last recorded audio file for history
+        self.last_recorded_audio_path = None
+        self.last_recorded_sample_rate = None
 
         # Progress callback for transcription
         self.progress_callback = None  # Called with (percent, message) during transcription
@@ -126,6 +158,34 @@ class PureRecorder:
         system certificates: sudo dnf install ca-certificates (or equivalent)
         """
         try:
+            # Enable downloads globally for huggingface_hub
+            import os
+            import ssl
+            import warnings
+            os.environ.pop('HF_HUB_OFFLINE', None)  # Remove if set
+
+            # Disable SSL verification if there are certificate issues
+            # This is a workaround for systems with certificate problems
+            try:
+                ssl._create_default_https_context = ssl._create_unverified_context
+                # Suppress SSL warnings since we're intentionally disabling verification
+                warnings.filterwarnings('ignore', message='Unverified HTTPS request')
+                log.debug("SSL verification disabled for model downloads (certificate issues)")
+            except Exception:
+                pass
+
+            # Try to configure huggingface_hub to allow downloads
+            try:
+                from huggingface_hub import configure_http_backend
+                import requests
+                session = requests.Session()
+                session.verify = False  # Disable SSL verification
+                configure_http_backend(backend_factory=lambda: session)
+                log.info("Configured huggingface_hub with SSL verification disabled")
+            except Exception as e:
+                log.debug(f"Could not configure huggingface_hub backend: {e}")
+                pass  # Not critical if this fails
+
             # Notify UI that loading started
             if self.model_loading_started_callback:
                 self.model_loading_started_callback()
@@ -136,7 +196,19 @@ class PureRecorder:
             if self.whisper_device == "auto":
                 try:
                     import torch
-                    device = "cuda" if torch.cuda.is_available() else "cpu"
+                    # Check if CUDA is available AND actually usable
+                    if torch.cuda.is_available():
+                        try:
+                            # Try to actually use CUDA to verify it works
+                            _ = torch.cuda.get_device_name(0)
+                            device = "cuda"
+                            log.info("CUDA detected and verified")
+                        except Exception as cuda_error:
+                            log.warning(f"CUDA detected but not usable: {cuda_error}")
+                            log.info("Falling back to CPU")
+                            device = "cpu"
+                    else:
+                        device = "cpu"
                 except ImportError:
                     device = "cpu"
             else:
@@ -156,15 +228,16 @@ class PureRecorder:
 
             # Load the requested model size
             try:
-                log.debug(f"Loading {self.whisper_model_size} Whisper model...")
+                log.debug(f"Loading {self.whisper_model_size} Whisper model on {device}...")
                 from faster_whisper import WhisperModel
                 self.whisper_model = WhisperModel(
                     self.whisper_model_size,
                     device=device,
-                    download_root=model_path
+                    download_root=model_path,
+                    local_files_only=False  # Allow downloading if not cached
                 )
                 self.whisper_model_name = self.whisper_model_size
-                log.info(f"Whisper {self.whisper_model_size} model loaded successfully")
+                log.info(f"Whisper {self.whisper_model_size} model loaded successfully on {device}")
                 log.debug(f"Model stored in: {model_path}")
 
                 # Notify UI that loading completed
@@ -172,7 +245,26 @@ class PureRecorder:
                     self.model_loading_complete_callback()
                 return
             except Exception as e:
-                log.error(f"Failed to load {self.whisper_model_size} model: {e}")
+                log.error(f"Failed to load {self.whisper_model_size} model on {device}: {e}")
+
+                # If CUDA failed, try CPU as fallback
+                if device == "cuda":
+                    log.warning("CUDA model loading failed, retrying with CPU...")
+                    try:
+                        self.whisper_model = WhisperModel(
+                            self.whisper_model_size,
+                            device="cpu",
+                            download_root=model_path,
+                            local_files_only=False
+                        )
+                        self.whisper_model_name = self.whisper_model_size
+                        log.info(f"Whisper {self.whisper_model_size} model loaded successfully on CPU (fallback)")
+
+                        if self.model_loading_complete_callback:
+                            self.model_loading_complete_callback()
+                        return
+                    except Exception as cpu_error:
+                        log.error(f"Failed to load {self.whisper_model_size} model on CPU: {cpu_error}")
 
                 # Fallback to tiny model if requested model fails
                 if self.whisper_model_size != "tiny":
@@ -181,7 +273,8 @@ class PureRecorder:
                         self.whisper_model = WhisperModel(
                             "tiny",
                             device=device,
-                            download_root=model_path
+                            download_root=model_path,
+                            local_files_only=False  # Allow downloading if not cached
                         )
                         self.whisper_model_name = "tiny"
                         log.info("Whisper tiny model loaded successfully (fallback)")
@@ -309,6 +402,9 @@ class PureRecorder:
                     callback("Device disconnected", "error")
                 return
 
+            # Log current preview_audio_data state before starting new recording
+            log.debug(f"START_RECORDING: preview_audio_data before recording: {self.preview_audio_data is not None}, id={id(self.preview_audio_data)}")
+
             self.is_recording = True
             self.callback = callback
             log.debug(f"CALLBACK SET TO: {callback}")
@@ -335,23 +431,27 @@ class PureRecorder:
         log.debug(" RECORDER: is_recording set to False")
         
         # Clean up any active subprocess
-        if self.active_subprocess and self.active_subprocess.poll() is None:
-            log.debug(" RECORDER: Terminating active subprocess...")
-            try:
-                self.active_subprocess.terminate()
-                # Give it a moment to terminate gracefully
+        if self.active_subprocess:
+            if self.active_subprocess.poll() is None:
+                log.debug(f" RECORDER: Terminating active subprocess (pid={self.active_subprocess.pid})...")
                 try:
-                    self.active_subprocess.wait(timeout=2)
-                    log.debug(" RECORDER: Subprocess terminated gracefully")
-                except subprocess.TimeoutExpired:
-                    log.debug(" RECORDER: Subprocess didn't terminate, killing...")
-                    self.active_subprocess.kill()
-                    self.active_subprocess.wait()
-                    log.debug(" RECORDER: Subprocess killed")
-            except Exception as e:
-                log.error(f"RECORDER: Error cleaning up subprocess: {e}")
-            finally:
-                self.active_subprocess = None
+                    self.active_subprocess.terminate()
+                    # Give it a moment to terminate gracefully
+                    try:
+                        self.active_subprocess.wait(timeout=2)
+                        log.debug(" RECORDER: Subprocess terminated gracefully")
+                    except subprocess.TimeoutExpired:
+                        log.warning(f" RECORDER: Subprocess (pid={self.active_subprocess.pid}) didn't terminate in 2s, killing...")
+                        self.active_subprocess.kill()
+                        self.active_subprocess.wait()
+                        log.warning(" RECORDER: Subprocess killed with SIGKILL")
+                except Exception as e:
+                    log.error(f"RECORDER: Error cleaning up subprocess: {e}")
+            else:
+                log.debug(f" RECORDER: Subprocess already finished (returncode={self.active_subprocess.returncode})")
+
+            # Always clear the subprocess reference
+            self.active_subprocess = None
 
     def pause_recording(self):
         """Pause recording without stopping - saves current segment."""
@@ -465,15 +565,34 @@ class PureRecorder:
 
             log.info(f"PREVIEW: Playing back {len(self.preview_audio_data)} samples at {self.preview_sample_rate}Hz")
 
-            # Convert int16 to float32 for playback (-1.0 to 1.0 range)
-            audio_float = self.preview_audio_data.astype(np.float32) / 32768.0
+            # Capture data in local variables for thread closure
+            audio_data = self.preview_audio_data.copy()
+            sample_rate = self.preview_sample_rate
 
-            # Play audio and wait for completion
-            import sounddevice as sd
-            sd.play(audio_float, samplerate=self.preview_sample_rate)
-            sd.wait()  # Wait for playback to finish
+            # Play audio in background thread to avoid blocking UI
+            def play_and_wait():
+                try:
+                    # Convert int16 to float32 for playback (-1.0 to 1.0 range)
+                    audio_float = audio_data.astype(np.float32) / 32768.0
 
-            log.info("PREVIEW: Playback completed")
+                    import sounddevice as sd
+                    sd.play(audio_float, samplerate=sample_rate)
+                    sd.wait()  # Wait for playback to finish
+                    log.info("PREVIEW: Playback completed")
+                except Exception as e:
+                    log.error(f"PREVIEW: Playback thread error: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+            # Use thread pool if available, otherwise create thread
+            if self.thread_pool:
+                self.thread_pool.submit(play_and_wait)
+            else:
+                import threading
+                thread = threading.Thread(target=play_and_wait)
+                thread.daemon = True
+                thread.start()
+
             return True
 
         except Exception as e:
@@ -483,8 +602,12 @@ class PureRecorder:
     def transcribe_preview_audio(self, callback):
         """Transcribe the stored preview audio data."""
         try:
+            log.debug(f"TRANSCRIBE: Called on recorder instance id={id(self)}")
+            log.debug(f"TRANSCRIBE: preview_audio_data={self.preview_audio_data is not None}, sample_rate={self.preview_sample_rate}")
+            log.debug(f"TRANSCRIBE: preview_audio_data id={id(self.preview_audio_data)}, type={type(self.preview_audio_data)}")
             if self.preview_audio_data is None:
-                log.error("TRANSCRIBE: No preview audio data available")
+                log.error(f"TRANSCRIBE: No preview audio data available! preview_audio_data={self.preview_audio_data}, preview_sample_rate={self.preview_sample_rate}")
+                log.error(f"TRANSCRIBE: id(self.preview_audio_data)={id(self.preview_audio_data)}")
                 if callback:
                     callback("", "no_audio")
                 return
@@ -650,20 +773,29 @@ class PureRecorder:
         # Use lock to prevent concurrent loading
         with self.model_loading_lock:
             if not self.whisper_model:
-                log.info("Loading Whisper model")
+                log.info("Loading Whisper model on-demand")
                 try:
+                    # Disable SSL verification for downloads (workaround for certificate issues)
+                    import ssl
+                    try:
+                        ssl._create_default_https_context = ssl._create_unverified_context
+                    except Exception:
+                        pass
+
                     from faster_whisper import WhisperModel
                     model_path = self.get_whisper_model_path()
                     self.whisper_model = WhisperModel(
                         "tiny",
                         device="cpu",
-                        download_root=model_path
+                        download_root=model_path,
+                        local_files_only=False  # Allow downloading if not cached
                     )
                     log.info(" Whisper tiny model loaded successfully")
                     log.debug(f"Model stored in: {model_path}")
                 except Exception as e:
-                    log.error(f"FATAL: Failed to load Whisper model: {e}")
-                    self.callback("ERROR: Whisper failed to load", "error")
+                    error_msg = f"Failed to load Whisper model: {str(e)}"
+                    log.error(f"FATAL: {error_msg}")
+                    self.callback(f"ERROR: {error_msg}", "error")
                     return
         
         # ONLY USE WHISPER - NO GOOGLE
@@ -680,33 +812,59 @@ class PureRecorder:
             if current_mic:
                 device_index = current_mic['index']
                 device_name = current_mic['name']
-                log.debug(f"WHISPER_RECORD: Using selected microphone: {device_name} (index: {device_index})")
+                log.info(f"WHISPER_RECORD: Using selected microphone: {device_name} (index: {device_index})")
             else:
                 device_index = None
-                log.debug(" WHISPER_RECORD: Using default audio input (no microphone selected)")
-            
-            # Get device sample rate directly like SAI does - simple and works
-            log.debug(f"WHISPER_RECORD: Getting device sample rate...")
-            
+                log.warning("WHISPER_RECORD: No microphone selected! Using default audio input")
+
+            # Verify the device index is valid
             try:
                 import sounddevice as sd
                 devices = sd.query_devices()
-                
-                if device_index is None or device_index >= len(devices):
-                    device_index = sd.default.device[0] if hasattr(sd.default.device, '__iter__') else None
-                    log.debug(f"WHISPER_RECORD: Using default device: {device_index}")
-                
-                if device_index is not None and device_index < len(devices):
-                    device_info = devices[device_index]
-                    working_rate = int(device_info.get('default_samplerate', 44100))
-                    log.debug(f"WHISPER_RECORD: Using device default rate: {working_rate}Hz")
+                log.info(f"WHISPER_RECORD: Total available devices: {len(devices)}")
+
+                if device_index is not None:
+                    if device_index >= len(devices):
+                        log.error(f"WHISPER_RECORD: Device index {device_index} is invalid (only {len(devices)} devices available)")
+                        raise Exception(f"Invalid microphone index {device_index}")
+                    else:
+                        device_info = devices[device_index]
+                        log.info(f"WHISPER_RECORD: Device {device_index} details: {device_info}")
                 else:
-                    working_rate = 44100
-                    log.debug(" WHISPER_RECORD: Using fallback rate: 44100Hz")
-                    
+                    default_device = sd.default.device[0] if hasattr(sd.default.device, '__iter__') else None
+                    log.info(f"WHISPER_RECORD: Using default input device: {default_device}")
             except Exception as e:
-                log.error(f"WHISPER_RECORD: Error getting device rate: {e}, using 44100Hz")
-                working_rate = 44100
+                log.error(f"WHISPER_RECORD: Error verifying device: {e}")
+
+
+            # Determine sample rate - use configured rate or auto-detect
+            if self.configured_sample_rate != "auto":
+                # Use the configured sample rate
+                working_rate = int(self.configured_sample_rate)
+                log.info(f"WHISPER_RECORD: Using configured sample rate: {working_rate}Hz")
+            else:
+                # Auto-detect device sample rate
+                log.debug(f"WHISPER_RECORD: Auto-detecting device sample rate...")
+
+                try:
+                    import sounddevice as sd
+                    devices = sd.query_devices()
+
+                    if device_index is None or device_index >= len(devices):
+                        device_index = sd.default.device[0] if hasattr(sd.default.device, '__iter__') else None
+                        log.debug(f"WHISPER_RECORD: Using default device: {device_index}")
+
+                    if device_index is not None and device_index < len(devices):
+                        device_info = devices[device_index]
+                        working_rate = int(device_info.get('default_samplerate', 44100))
+                        log.debug(f"WHISPER_RECORD: Using device default rate: {working_rate}Hz")
+                    else:
+                        working_rate = 44100
+                        log.debug(" WHISPER_RECORD: Using fallback rate: 44100Hz")
+
+                except Exception as e:
+                    log.error(f"WHISPER_RECORD: Error getting device rate: {e}, using 44100Hz")
+                    working_rate = 44100
             
             temp_audio_path = None
             
@@ -714,24 +872,60 @@ class PureRecorder:
             log.info(f"WHISPER_RECORD: Starting subprocess recording at {working_rate}Hz...")
             
             try:
-                # Launch isolated SoundDevice audio recording subprocess  
+                # Launch isolated SoundDevice audio recording subprocess
                 recorder_script = os.path.join(os.path.dirname(__file__), 'audio_recorder_sd.py')
-                
-                # Start recording subprocess
+
+                # Use sys.executable to run with same Python interpreter
+                # Pass environment to ensure UV/pip packages are available
+                import sys
+                env = os.environ.copy()
+                # Ensure PYTHONPATH includes current packages
+                if hasattr(sys, 'path'):
+                    env['PYTHONPATH'] = os.pathsep.join(sys.path)
+
                 process = subprocess.Popen([
-                    'python', recorder_script,
+                    sys.executable, recorder_script,
                     str(device_index) if device_index is not None else "None",
                     str(working_rate)
-                ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
-                   cwd=os.path.dirname(__file__))
+                ], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                   env=env, cwd=os.path.dirname(__file__))
                 
                 # Store subprocess reference for cleanup
                 self.active_subprocess = process
-                
-                # Let it record for a short time to test
+
+                # Let it start up and check if it's working
                 import time
-                time.sleep(0.5)  # Test for half a second
-                
+                import select
+
+                # Read initial stderr output to see startup messages
+                startup_messages = []
+                for i in range(5):  # Check 5 times over 0.5 seconds
+                    time.sleep(0.1)
+
+                    # Check if process already died
+                    if process.poll() is not None:
+                        # Process died, get all output
+                        stdout, stderr = process.communicate()
+                        stderr_text = stderr.decode() if stderr else "No stderr"
+                        stdout_text = stdout.decode() if stdout else "No stdout"
+                        log.error(f"WHISPER_RECORD: Subprocess died during startup (returncode={process.returncode})")
+                        log.error(f"WHISPER_RECORD: Startup stderr: {stderr_text}")
+                        log.error(f"WHISPER_RECORD: Startup stdout: {stdout_text}")
+                        break
+
+                    # Read any stderr output (non-blocking)
+                    if hasattr(select, 'select'):
+                        ready, _, _ = select.select([process.stderr], [], [], 0.001)
+                        if ready:
+                            line = process.stderr.readline()
+                            if line:
+                                decoded = line.decode().strip()
+                                startup_messages.append(decoded)
+                                log.debug(f"WHISPER_RECORD: Startup: {decoded}")
+
+                if startup_messages:
+                    log.info(f"WHISPER_RECORD: Subprocess startup messages: {startup_messages}")
+
                 # If process is still running, it worked
                 if process.poll() is None:
                     log.debug(f"WHISPER_RECORD: Subprocess recording working at {working_rate}Hz")
@@ -741,10 +935,12 @@ class PureRecorder:
                     
                     # Monitor real audio levels from subprocess
                     start_time = time.time()
+                    stderr_lines = []  # Collect all stderr output
+
                     while self.is_recording:
                         time.sleep(0.02)  # Much faster polling - 50Hz instead of 10Hz
                         elapsed = time.time() - start_time
-                        
+
                         # Read ALL available audio levels from subprocess stderr
                         try:
                             # Check for output from subprocess (non-blocking)
@@ -759,6 +955,7 @@ class PureRecorder:
                                         line = process.stderr.readline()
                                         if line:
                                             line = line.decode().strip()
+                                            stderr_lines.append(line)  # Save all stderr output
                                             if line.startswith("LEVEL:"):
                                                 level = int(line.split(":")[1])
                                                 with self.audio_level_lock:
@@ -786,15 +983,32 @@ class PureRecorder:
                     # Stop the subprocess
                     log.info(" WHISPER_RECORD: Stopping subprocess...")
                     process.terminate()
-                    
+
                     # Wait for output
                     try:
+                        log.debug("WHISPER_RECORD: Waiting for subprocess to finish (timeout=10s)...")
                         stdout, stderr = process.communicate(timeout=10)
+                        log.debug(f"WHISPER_RECORD: Subprocess finished with returncode={process.returncode}")
+
+                        # Log all stderr we collected during recording
+                        if stderr_lines:
+                            log.info(f"WHISPER_RECORD: Subprocess stderr during recording ({len(stderr_lines)} lines):")
+                            for line in stderr_lines:
+                                if not line.startswith("LEVEL:"):  # Don't log the volume levels
+                                    log.info(f"  {line}")
+
+                        # Log any remaining stderr from communicate()
+                        if stderr:
+                            remaining_stderr = stderr.decode().strip()
+                            if remaining_stderr:
+                                log.info(f"WHISPER_RECORD: Additional stderr after terminate: {remaining_stderr}")
+
                         if process.returncode == 0 and stdout.strip():
                             temp_audio_path = stdout.decode().strip()
-                            log.debug(f"WHISPER_RECORD: Audio saved to {temp_audio_path}")
+                            log.info(f"WHISPER_RECORD: Audio saved to {temp_audio_path}")
                         else:
-                            log.error(f"WHISPER_RECORD: Subprocess failed: {stderr.decode()}")
+                            log.error(f"WHISPER_RECORD: Subprocess failed with returncode {process.returncode}")
+                            log.error(f"WHISPER_RECORD: stdout: {stdout.decode() if stdout else 'empty'}")
                     except subprocess.TimeoutExpired:
                         log.error(" WHISPER_RECORD: Subprocess timeout, killing...")
                         process.kill()
@@ -805,7 +1019,12 @@ class PureRecorder:
                     
                 else:
                     stdout, stderr = process.communicate()
-                    log.error(f"WHISPER_RECORD: Failed at {working_rate}Hz: {stderr.decode()}")
+                    stderr_text = stderr.decode() if stderr else "No error output"
+                    stdout_text = stdout.decode() if stdout else "No stdout"
+                    log.error(f"WHISPER_RECORD: Failed at {working_rate}Hz")
+                    log.error(f"WHISPER_RECORD: Return code: {process.returncode}")
+                    log.error(f"WHISPER_RECORD: STDERR: {stderr_text}")
+                    log.error(f"WHISPER_RECORD: STDOUT: {stdout_text}")
                     temp_audio_path = None
                     # Clear subprocess reference
                     self.active_subprocess = None
@@ -824,9 +1043,12 @@ class PureRecorder:
             try:
                 with open(temp_audio_path, 'rb') as f:
                     raw_data = f.read()
-                
-                # Clean up temp file
-                os.unlink(temp_audio_path)
+
+                # Store the temp audio path for later saving to history
+                # (Don't delete yet - will be saved to audio_history after transcription)
+                self.last_recorded_audio_path = temp_audio_path
+                self.last_recorded_sample_rate = working_rate
+                log.debug(f"WHISPER_RECORD: Stored temp audio path for history: {temp_audio_path}")
                 
                 if not raw_data:
                     log.debug("No audio data in file")
@@ -843,12 +1065,33 @@ class PureRecorder:
                 return
 
             # Store preview data for playback before transcription
-            self.preview_audio_data = audio_array
+            log.debug(f"PREVIEW: About to store preview_audio_data on recorder instance id={id(self)}")
+            log.debug(f"PREVIEW: Current value before store: {self.preview_audio_data is not None}")
+            self.preview_audio_data = audio_array.copy()  # Make a copy to avoid reference issues
             self.preview_sample_rate = working_rate
             log.info(f"PREVIEW: Stored {len(audio_array)} samples at {working_rate}Hz for preview")
+            log.debug(f"PREVIEW: preview_audio_data id={id(self.preview_audio_data)}, type={type(self.preview_audio_data)}, len={len(self.preview_audio_data)}")
+            log.debug(f"PREVIEW: Verifying storage - self.preview_audio_data is not None: {self.preview_audio_data is not None}")
+            log.debug(f"PREVIEW: Stored on recorder instance id={id(self)}")
 
-            # Notify UI that preview is ready (transcription will happen after user accepts)
-            self.callback("", "preview_ready")
+            # Auto-transcribe immediately instead of waiting for user to click accept
+            log.info("PREVIEW: Auto-transcribing immediately (skipping preview)")
+
+            # Transcribe the audio we just stored
+            def transcribe_callback(text, language):
+                log.debug(f"AUTO_TRANSCRIBE: Got result: '{text}', language={language}")
+                if self.callback:
+                    self.callback(text, language)
+
+            # Call transcribe in thread pool to avoid blocking
+            if self.thread_pool:
+                self.thread_pool.submit(self.transcribe_preview_audio, transcribe_callback)
+            else:
+                import threading
+                thread = threading.Thread(target=self.transcribe_preview_audio, args=(transcribe_callback,))
+                thread.daemon = True
+                thread.start()
+
             return
 
             # ORIGINAL CODE BELOW - will be called from process_preview_audio after user accepts

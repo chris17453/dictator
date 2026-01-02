@@ -144,6 +144,64 @@ class SettingsDialog(QDialog):
                 image: none;
                 border: none;
             }
+            QScrollBar:vertical {
+                background-color: #2a2a2a;
+                width: 28px;
+                margin: 16px 0px 16px 0px;
+                border-radius: 7px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #4CAF50;
+                min-height: 20px;
+                border-radius: 7px;
+                margin: 2px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #5CBF60;
+            }
+            QScrollBar::add-line:vertical {
+                background-color: #4CAF50;
+                height: 14px;
+                subcontrol-position: bottom;
+                subcontrol-origin: margin;
+                border: 1px solid #333;
+                border-bottom-left-radius: 7px;
+                border-bottom-right-radius: 7px;
+            }
+            QScrollBar::sub-line:vertical {
+                background-color: #4CAF50;
+                height: 14px;
+                subcontrol-position: top;
+                subcontrol-origin: margin;
+                border: 1px solid #333;
+                border-top-left-radius: 7px;
+                border-top-right-radius: 7px;
+            }
+            QScrollBar::add-line:vertical:hover, QScrollBar::sub-line:vertical:hover {
+                background-color: #5CBF60;
+            }
+            QScrollBar::up-arrow:vertical {
+                border: 2px solid white;
+                width: 3px;
+                height: 3px;
+                border-left: none;
+                border-right: none;
+                border-bottom: none;
+            }
+            QScrollBar::down-arrow:vertical {
+                border: 2px solid white;
+                width: 3px;
+                height: 3px;
+                border-left: none;
+                border-right: none;
+                border-top: none;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: none;
+            }
+            QScrollArea {
+                border: none;
+            }
         """)
         
         self.init_ui()
@@ -222,8 +280,20 @@ class SettingsDialog(QDialog):
         mic_row = QHBoxLayout()
         mic_row.addWidget(self.microphone_combo)
         mic_row.addWidget(refresh_btn)
-        
+
         mic_layout.addRow("Microphone:", mic_row)
+
+        # Sample rate selection
+        self.sample_rate_combo = QComboBox()
+        self.sample_rate_combo.addItem("Auto (Recommended)", "auto")
+        self.sample_rate_combo.addItem("48000 Hz (High Quality)", 48000)
+        self.sample_rate_combo.addItem("44100 Hz (CD Quality)", 44100)
+        self.sample_rate_combo.addItem("16000 Hz (Whisper Optimal)", 16000)
+        self.sample_rate_combo.addItem("22050 Hz (Lower Quality)", 22050)
+        self.sample_rate_combo.setStyleSheet(self.microphone_combo.styleSheet())
+        self.sample_rate_combo.setToolTip("Sample rate for audio recording. Auto will use device default. 16000 Hz is optimal for Whisper.")
+        mic_layout.addRow("Sample Rate:", self.sample_rate_combo)
+
         audio_layout.addWidget(mic_group)
 
         # Whisper Model Settings
@@ -370,10 +440,22 @@ class SettingsDialog(QDialog):
                 border: 1px solid #4CAF50;
                 border-radius: 4px;
                 padding: 5px 8px;
+                padding-right: 20px;
+                min-width: 80px;
             }
             QSpinBox::up-button, QSpinBox::down-button {
                 background-color: #4CAF50;
                 border: none;
+                width: 16px;
+                subcontrol-origin: border;
+            }
+            QSpinBox::up-button {
+                subcontrol-position: top right;
+                border-top-right-radius: 3px;
+            }
+            QSpinBox::down-button {
+                subcontrol-position: bottom right;
+                border-bottom-right-radius: 3px;
             }
         """)
         self.confidence_threshold_spin.setToolTip("Show warning when transcription confidence falls below this threshold (0-100%)")
@@ -612,6 +694,31 @@ class SettingsDialog(QDialog):
         self.translation_font_size_spin.setRange(8, 72)
         self.translation_font_size_spin.setValue(14)
         self.translation_font_size_spin.setSuffix("px")
+        self.translation_font_size_spin.setStyleSheet("""
+            QSpinBox {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+                padding-right: 20px;
+                min-width: 80px;
+            }
+            QSpinBox::up-button, QSpinBox::down-button {
+                background-color: #4CAF50;
+                border: none;
+                width: 16px;
+                subcontrol-origin: border;
+            }
+            QSpinBox::up-button {
+                subcontrol-position: top right;
+                border-top-right-radius: 3px;
+            }
+            QSpinBox::down-button {
+                subcontrol-position: bottom right;
+                border-bottom-right-radius: 3px;
+            }
+        """)
         self.translation_font_btn.clicked.connect(self.choose_translation_font)
         self.translation_font_size_spin.valueChanged.connect(self.update_translation_font_size)
         trans_font_layout.addWidget(trans_font_label)
@@ -627,6 +734,31 @@ class SettingsDialog(QDialog):
         self.history_font_size_spin.setRange(8, 72)
         self.history_font_size_spin.setValue(12)
         self.history_font_size_spin.setSuffix("px")
+        self.history_font_size_spin.setStyleSheet("""
+            QSpinBox {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+                padding-right: 20px;
+                min-width: 80px;
+            }
+            QSpinBox::up-button, QSpinBox::down-button {
+                background-color: #4CAF50;
+                border: none;
+                width: 16px;
+                subcontrol-origin: border;
+            }
+            QSpinBox::up-button {
+                subcontrol-position: top right;
+                border-top-right-radius: 3px;
+            }
+            QSpinBox::down-button {
+                subcontrol-position: bottom right;
+                border-bottom-right-radius: 3px;
+            }
+        """)
         self.history_font_btn.clicked.connect(self.choose_history_font)
         self.history_font_size_spin.valueChanged.connect(self.update_history_font_size)
         hist_font_layout.addWidget(hist_font_label)
@@ -687,6 +819,31 @@ class SettingsDialog(QDialog):
         self.silence_threshold_spin = QSpinBox()
         self.silence_threshold_spin.setRange(1, 20)
         self.silence_threshold_spin.setSuffix("%")
+        self.silence_threshold_spin.setStyleSheet("""
+            QSpinBox {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+                padding-right: 20px;
+                min-width: 80px;
+            }
+            QSpinBox::up-button, QSpinBox::down-button {
+                background-color: #4CAF50;
+                border: none;
+                width: 16px;
+                subcontrol-origin: border;
+            }
+            QSpinBox::up-button {
+                subcontrol-position: top right;
+                border-top-right-radius: 3px;
+            }
+            QSpinBox::down-button {
+                subcontrol-position: bottom right;
+                border-bottom-right-radius: 3px;
+            }
+        """)
         self.silence_threshold_spin.setToolTip("Audio level below which is considered silence (1-20%)")
         hotkey_layout.addRow("Silence threshold:", self.silence_threshold_spin)
 
@@ -912,7 +1069,16 @@ class SettingsDialog(QDialog):
                         self.microphone_combo.setCurrentIndex(i)
                         log.debug(f"SETTINGS: Set microphone combo to index {i} for device {current_mic_index}")
                         break
-        
+
+        # Load current sample rate selection
+        if hasattr(self.parent_window, 'sample_rate'):
+            current_sample_rate = self.parent_window.sample_rate
+            for i in range(self.sample_rate_combo.count()):
+                if self.sample_rate_combo.itemData(i) == current_sample_rate:
+                    self.sample_rate_combo.setCurrentIndex(i)
+                    log.debug(f"SETTINGS: Set sample rate combo to index {i} for rate {current_sample_rate}")
+                    break
+
         # Load current colors into buttons
         if hasattr(self.parent_window, 'custom_bg_color'):
             bg_color = QColor(self.parent_window.custom_bg_color)
@@ -1912,11 +2078,24 @@ class SettingsDialog(QDialog):
                 success = self.parent_window.recorder.set_microphone(device_index)
                 if success:
                     log.info(f"SETTINGS: Applied microphone selection: device index {device_index}")
+                    # Update the microphone label on the main UI
+                    if hasattr(self.parent_window, 'update_microphone_label'):
+                        self.parent_window.update_microphone_label()
                     # Save config immediately to persist the change
                     self.parent_window.save_config()
                 else:
                     log.error(f"SETTINGS: Failed to apply microphone selection: device index {device_index}")
-        
+
+        # Apply sample rate selection
+        if hasattr(self, 'sample_rate_combo'):
+            selected_sample_rate = self.sample_rate_combo.currentData()
+            if selected_sample_rate is not None:
+                self.parent_window.sample_rate = selected_sample_rate
+                # Also update the recorder's configured sample rate
+                if hasattr(self.parent_window, 'recorder'):
+                    self.parent_window.recorder.configured_sample_rate = selected_sample_rate
+                log.info(f"SETTINGS: Applied sample rate: {selected_sample_rate}")
+
         # Apply opacity using alpha channel (always works!)
         if hasattr(self, 'opacity_slider'):
             opacity_value = self.opacity_slider.value()
