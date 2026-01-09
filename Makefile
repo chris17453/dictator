@@ -38,9 +38,19 @@ install: sync ## Install the package in editable mode (user install)
 	@echo "$(GREEN)✓ Package installed$(RESET)"
 	@echo "$(YELLOW)Run 'dictator' to start the application$(RESET)"
 
-install-system: build ## Install to system (requires root)
+install-system: build ## Install to system with dedicated venv (requires root)
 	@echo "$(BOLD)$(BLUE)Installing to system...$(RESET)"
-	sudo $(PYTHON) -m pip install dist/*.whl --force-reinstall
+	@echo "$(BLUE)Creating system virtual environment...$(RESET)"
+	sudo mkdir -p /opt/dictator
+	sudo $(UV) venv /opt/dictator/venv
+	@echo "$(BLUE)Installing PyTorch with CUDA 12 support...$(RESET)"
+	sudo $(UV) pip install --python /opt/dictator/venv/bin/python torch --index-url https://download.pytorch.org/whl/cu121
+	@echo "$(BLUE)Installing dictator package...$(RESET)"
+	sudo $(UV) pip install --python /opt/dictator/venv/bin/python dist/*.whl --force-reinstall
+	@echo "$(BLUE)Creating system launcher script...$(RESET)"
+	@echo '#!/bin/bash' | sudo tee /usr/local/bin/dictator > /dev/null
+	@echo 'exec /opt/dictator/venv/bin/python -m src "$$@"' | sudo tee -a /usr/local/bin/dictator > /dev/null
+	sudo chmod +x /usr/local/bin/dictator
 	@echo "$(GREEN)✓ System installation complete$(RESET)"
 	@$(MAKE) update-desktop
 	@echo ""
@@ -53,7 +63,8 @@ uninstall: ## Uninstall the package from current environment
 
 uninstall-system: ## Uninstall from system (requires root)
 	@echo "$(BOLD)$(BLUE)Uninstalling from system...$(RESET)"
-	sudo $(PYTHON) -m pip uninstall $(PROJECT_NAME) -y || true
+	sudo rm -rf /opt/dictator
+	sudo rm -f /usr/local/bin/dictator
 	sudo rm -f /usr/local/share/applications/dictator.desktop
 	sudo rm -f /usr/local/share/pixmaps/dictator.png
 	sudo rm -f /usr/local/share/pixmaps/dictator.ico
@@ -61,10 +72,12 @@ uninstall-system: ## Uninstall from system (requires root)
 
 run: ## Run the application
 	@echo "$(BOLD)$(BLUE)Starting DICTATOR...$(RESET)"
+	@export LD_LIBRARY_PATH="/usr/local/cuda-13.1/targets/x86_64-linux/lib:/usr/local/lib64/python3.12/site-packages/ctranslate2.libs:$$LD_LIBRARY_PATH"; \
 	$(UV) run python -m $(SRC_DIR)
 
 run-no-tray: ## Run the application without system tray
 	@echo "$(BOLD)$(BLUE)Starting DICTATOR (no tray)...$(RESET)"
+	@export LD_LIBRARY_PATH="/usr/local/cuda-13.1/targets/x86_64-linux/lib:/usr/local/lib64/python3.12/site-packages/ctranslate2.libs:$$LD_LIBRARY_PATH"; \
 	$(UV) run python -m $(SRC_DIR) --no-tray
 
 list-devices: ## List available audio input devices

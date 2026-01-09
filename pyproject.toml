@@ -47,7 +47,7 @@ classifiers = [
 [project.optional-dependencies]
 whisper = [
     "faster-whisper>=0.10.0",
-    "torch>=1.10.0",
+    "torch>=2.0.0",
     "transformers>=4.20.0",
     "sentencepiece>=0.1.95",
     "numpy>=1.18.0",

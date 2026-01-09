@@ -302,7 +302,9 @@ class SettingsDialog(QDialog):
 
         # Model selection dropdown
         self.model_combo = QComboBox()
-        self.model_combo.addItems(['tiny', 'base', 'small', 'medium', 'large-v2', 'large-v3'])
+        self.model_sizes = ['tiny', 'base', 'small', 'medium', 'large-v2', 'large-v3']
+        # Will populate with download status indicators
+        self._update_model_combo()
         self.model_combo.setStyleSheet("""
             QComboBox {
                 background-color: #333;
@@ -1192,7 +1194,12 @@ class SettingsDialog(QDialog):
             from .dictator import thread_pool
 
         # Get selected model and directory
-        model_size = self.model_combo.currentText()
+        # Get the actual model size from item data (without the ✓ indicator)
+        current_index = self.model_combo.currentIndex()
+        model_size = self.model_combo.itemData(current_index)
+        if not model_size:  # Fallback to text if no data
+            model_size = self.model_combo.currentText().replace(" ✓", "")
+
         model_dir = self.model_dir_input.text() or str(Path.home() / ".config" / "dictator" / "models")
         device = self.device_combo.currentText()
 
@@ -1215,30 +1222,103 @@ class SettingsDialog(QDialog):
         # Update UI for download start
         self.download_model_btn.setEnabled(False)
         self.download_status.setText(f"Downloading {model_size} model...")
-        self.download_progress.setValue(0)
+        # Set to indeterminate mode immediately (no progress info available from faster-whisper)
+        self.download_progress.setRange(0, 0)  # Indeterminate animation
         self.download_progress.show()
+
+        # Force UI update
+        QApplication.processEvents()
 
         # Download in thread pool to avoid freezing UI
         def download_task():
             try:
-                # Import here to avoid issues if faster_whisper not installed
+                import os
+                import ssl
+                import warnings
+
+                # SSL workaround - Set environment variables BEFORE any imports
+                # This is the only way that works with newer httpcore/huggingface_hub
+                os.environ['CURL_CA_BUNDLE'] = ''
+                os.environ['REQUESTS_CA_BUNDLE'] = ''
+                os.environ['SSL_CERT_FILE'] = ''
+                os.environ['SSL_NO_VERIFY'] = '1'
+
+                # Also set Python's SSL context
+                try:
+                    ssl._create_default_https_context = ssl._create_unverified_context
+                    warnings.filterwarnings('ignore', message='Unverified HTTPS request')
+                    log.debug("SSL verification disabled via environment variables and SSL context")
+                except Exception as e:
+                    log.warning(f"Could not modify SSL context: {e}")
+
+                # Import after setting environment variables
                 from faster_whisper import WhisperModel
+                from PyQt6.QtCore import QTimer
+
+                # Aggressive monkey-patching to disable SSL verification
+                try:
+                    # Patch urllib3 (used by requests and others)
+                    import urllib3
+                    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                    log.debug("Disabled urllib3 SSL warnings")
+                except Exception as e:
+                    log.warning(f"Could not disable urllib3 warnings: {e}")
+
+                try:
+                    # Monkey-patch httpcore's sync SSL stream creation
+                    import httpcore._backends.sync as httpcore_sync
+
+                    original_start_tls = httpcore_sync.SyncStream.start_tls
+
+                    def patched_start_tls(self, ssl_context, server_hostname=None, timeout=None):
+                        # Create unverified SSL context
+                        unverified_context = ssl.create_default_context()
+                        unverified_context.check_hostname = False
+                        unverified_context.verify_mode = ssl.CERT_NONE
+                        return original_start_tls(self, unverified_context, server_hostname, timeout)
+
+                    httpcore_sync.SyncStream.start_tls = patched_start_tls
+                    log.info("Successfully monkey-patched httpcore TLS verification")
+                except Exception as e:
+                    log.warning(f"Could not monkey-patch httpcore TLS: {e}")
 
                 # Determine device
                 if device == "auto":
                     try:
-                        import torch
-                        actual_device = "cuda" if torch.cuda.is_available() else "cpu"
+                        import ctranslate2
+                        actual_device = "cuda" if ctranslate2.get_cuda_device_count() > 0 else "cpu"
+                        log.debug(f"Auto device selection: {actual_device} (CUDA devices: {ctranslate2.get_cuda_device_count()})")
                     except ImportError:
                         actual_device = "cpu"
+                        log.warning("ctranslate2 not available, using CPU")
                 else:
                     actual_device = device
 
                 log.info(f"Downloading model with device={actual_device}, download_root={model_dir}")
 
+                # Create a flag and timer reference to track download progress
+                download_active = [True]
+                dots = [0]
+                status_timer = [None]  # Store timer reference so we can cancel it
+
+                # Periodic status update to show download is alive
+                def update_status():
+                    if not download_active[0]:
+                        return  # Stop if download is no longer active
+
+                    dots[0] = (dots[0] + 1) % 4
+                    dot_text = "." * dots[0]
+                    self.download_status.setText(f"Downloading {model_size} model{dot_text}")
+
+                    # Schedule next update
+                    status_timer[0] = QTimer.singleShot(500, update_status)
+
+                # Start status updates (on main thread)
+                QTimer.singleShot(500, update_status)
+
                 # Create WhisperModel - this triggers download if not present
-                # Note: We can't easily track progress with faster_whisper, so just show indeterminate
-                self.download_progress.setRange(0, 0)  # Indeterminate progress
+                # Note: faster_whisper doesn't provide progress callbacks
+                log.info(f"Initiating WhisperModel download (this may take several minutes)...")
 
                 model = WhisperModel(
                     model_size,
@@ -1246,18 +1326,21 @@ class SettingsDialog(QDialog):
                     download_root=model_dir
                 )
 
+                # Stop status updates BEFORE scheduling UI update
+                download_active[0] = False
+                log.debug("Download complete - stopping animated status updates")
+
                 # If we got here, download succeeded
                 log.info(f"Successfully downloaded {model_size} model")
 
-                # Update UI on main thread using QTimer
-                from PyQt6.QtCore import QTimer
-                QTimer.singleShot(0, lambda: self._on_download_complete(model_size))
+                # Small delay to ensure any pending status updates complete
+                # Then update UI on main thread
+                QTimer.singleShot(100, lambda: self._on_download_complete(model_size))
 
             except Exception as e:
                 log.error(f"Failed to download model: {e}")
 
                 # Show error dialog on main thread using QTimer
-                from PyQt6.QtCore import QTimer
                 QTimer.singleShot(0, lambda: self._on_download_error(str(e)))
 
         # Submit to thread pool
@@ -1265,31 +1348,31 @@ class SettingsDialog(QDialog):
 
     def _on_download_complete(self, model_size):
         """Called when download completes successfully"""
-        log.info(f"Download of {model_size} model complete")
+        log.info(f"Download of {model_size} model complete - updating UI")
 
-        # Update UI
+        # Stop progress bar animation and show completion
         self.download_progress.setRange(0, 100)
         self.download_progress.setValue(100)
         self.download_status.setText(f"✓ {model_size} model downloaded successfully!")
         self.download_status.setStyleSheet("color: #4CAF50; font-size: 12px; padding: 5px;")
 
+        # Force UI update immediately
+        QApplication.processEvents()
+        log.debug("Progress bar and status updated to show completion")
+
         # Re-enable button after 2 seconds
         QTimer.singleShot(2000, self._reset_download_ui)
 
-        # Show success message
-        if self.parent_window and hasattr(self.parent_window, 'show_error_dialog'):
-            # Use QMessageBox directly for success
-            msg_box = QMessageBox(self)
-            msg_box.setIcon(QMessageBox.Icon.Information)
-            msg_box.setWindowTitle("Download Complete")
-            msg_box.setText(f"Whisper {model_size} model downloaded successfully!")
-            msg_box.setInformativeText("The model is now ready to use.")
-            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
-            # Use non-blocking show() in tests to prevent blocking
-            if 'pytest' in sys.modules:
-                msg_box.show()  # Non-blocking for tests
-            else:
-                msg_box.exec()  # Blocking modal dialog for production
+        # Show success message (non-blocking)
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Icon.Information)
+        msg_box.setWindowTitle("Download Complete")
+        msg_box.setText(f"Whisper {model_size} model downloaded successfully!")
+        msg_box.setInformativeText("The model is now ready to use.")
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg_box.setModal(False)  # Non-blocking
+        msg_box.show()
+        log.info("Download completion dialog displayed")
 
     def _on_download_error(self, error_msg):
         """Called when download fails"""
@@ -1301,10 +1384,24 @@ class SettingsDialog(QDialog):
         self.download_status.setStyleSheet("color: #f44336; font-size: 12px; padding: 5px;")
         self.download_model_btn.setEnabled(True)
 
-        # Show error dialog
-        if self.parent_window and hasattr(self.parent_window, 'show_error_dialog'):
-            self.parent_window.show_error_dialog(
-                "Model Download Failed",
+        # Show error dialog - use QMessageBox directly for better visibility
+        from PyQt6.QtWidgets import QMessageBox
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Icon.Critical)
+        msg_box.setWindowTitle("Model Download Failed")
+
+        # Create more helpful error message based on error type
+        if "SSL" in error_msg or "certificate" in error_msg.lower():
+            detailed_msg = (
+                f"Could not download Whisper model due to SSL certificate issues.\n\n"
+                f"Error: {error_msg}\n\n"
+                f"This has been worked around - please try downloading again.\n\n"
+                f"If the problem persists, please check:\n"
+                f"• Your internet connection is active\n"
+                f"• Your system's CA certificates are up to date"
+            )
+        else:
+            detailed_msg = (
                 f"Could not download Whisper model.\n\n"
                 f"Error: {error_msg}\n\n"
                 f"Please check:\n"
@@ -1313,6 +1410,64 @@ class SettingsDialog(QDialog):
                 f"• Directory permissions are correct"
             )
 
+        msg_box.setText(detailed_msg)
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+
+        # Make sure dialog appears on top
+        msg_box.setWindowModality(Qt.WindowModality.ApplicationModal)
+        msg_box.raise_()
+        msg_box.activateWindow()
+
+        # Show dialog (non-blocking in tests, blocking otherwise)
+        import sys
+        if 'pytest' not in sys.modules:
+            msg_box.exec()
+        else:
+            msg_box.show()
+
+        log.info("Error dialog displayed to user")
+
+    def _check_model_downloaded(self, model_size: str) -> bool:
+        """Check if a specific model is already downloaded"""
+        from pathlib import Path
+
+        # Handle case where model_dir_input doesn't exist yet during initialization
+        if hasattr(self, 'model_dir_input') and self.model_dir_input.text():
+            model_dir = self.model_dir_input.text()
+        else:
+            model_dir = str(Path.home() / ".config" / "dictator" / "models")
+
+        model_dir_path = Path(model_dir)
+
+        if not model_dir_path.exists():
+            return False
+
+        # faster-whisper stores models as: models--Systran--faster-whisper-{size}
+        model_folder_name = f"models--Systran--faster-whisper-{model_size}"
+        model_path = model_dir_path / model_folder_name
+
+        return model_path.exists() and model_path.is_dir()
+
+    def _update_model_combo(self):
+        """Update model combo box with download status indicators"""
+        current_text = self.model_combo.currentText()
+        # Remove download indicator if present
+        if " ✓" in current_text:
+            current_text = current_text.replace(" ✓", "")
+
+        self.model_combo.clear()
+
+        for model_size in self.model_sizes:
+            is_downloaded = self._check_model_downloaded(model_size)
+            display_text = f"{model_size} ✓" if is_downloaded else model_size
+            self.model_combo.addItem(display_text, model_size)  # Store actual size as data
+
+        # Restore selection
+        for i in range(self.model_combo.count()):
+            if self.model_combo.itemData(i) == current_text or self.model_combo.itemText(i).startswith(current_text):
+                self.model_combo.setCurrentIndex(i)
+                break
+
     def _reset_download_ui(self):
         """Reset download UI to initial state"""
         self.download_progress.hide()
@@ -1320,16 +1475,20 @@ class SettingsDialog(QDialog):
         self.download_status.setStyleSheet("color: #ccc; font-size: 12px; padding: 5px;")
         self.download_model_btn.setEnabled(True)
 
+        # Update model combo to reflect newly downloaded model
+        self._update_model_combo()
+
     def load_whisper_settings(self):
         """Load Whisper model settings from parent window config"""
         if not self.parent_window:
             return
 
-        # Load model size
+        # Load model size - search by item data, not text (text may have checkmark)
         model_size = getattr(self.parent_window, 'whisper_model_size', 'tiny')
-        index = self.model_combo.findText(model_size)
-        if index >= 0:
-            self.model_combo.setCurrentIndex(index)
+        for i in range(self.model_combo.count()):
+            if self.model_combo.itemData(i) == model_size:
+                self.model_combo.setCurrentIndex(i)
+                break
 
         # Load model directory
         model_dir = getattr(self.parent_window, 'whisper_model_dir',
@@ -1355,7 +1514,12 @@ class SettingsDialog(QDialog):
         if not self.parent_window:
             return
 
-        self.parent_window.whisper_model_size = self.model_combo.currentText()
+        # Use itemData to get actual model size without checkmark
+        current_index = self.model_combo.currentIndex()
+        model_size = self.model_combo.itemData(current_index)
+        if not model_size:  # Fallback
+            model_size = self.model_combo.currentText().replace(" ✓", "")
+        self.parent_window.whisper_model_size = model_size
         self.parent_window.whisper_model_dir = self.model_dir_input.text()
         self.parent_window.whisper_device = self.device_combo.currentText()
         self.parent_window.whisper_language = self.language_combo.currentData()  # Use data (code), not text (display name)

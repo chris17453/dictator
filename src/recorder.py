@@ -20,32 +20,52 @@ except ImportError:
 
 log = get_logger(__name__)
 
-# Try to import Whisper for local speech recognition
-# Set CT2_USE_EXPERIMENTAL_PACKED_GEMM=0 to avoid potential cuDNN issues
-os.environ.setdefault('CT2_USE_EXPERIMENTAL_PACKED_GEMM', '0')
+# Configure library paths to use PyTorch's bundled CUDA 12 libraries
+# This allows faster-whisper/ctranslate2 to work with CUDA even on CUDA 13 systems
+try:
+    from pathlib import Path as PathLib
 
-# Check if cuDNN is available before trying to use CUDA
-def check_cudnn_available():
-    """Check if cuDNN libraries are available"""
+    # Find PyTorch's CUDA libraries in sys.path (includes venv)
+    for path in sys.path:
+        nvidia_libs = PathLib(path) / "nvidia"
+        if nvidia_libs.exists():
+            # Add all NVIDIA library directories to LD_LIBRARY_PATH
+            cuda_lib_paths = []
+            for lib_dir in nvidia_libs.glob("*/lib"):
+                if lib_dir.is_dir():
+                    cuda_lib_paths.append(str(lib_dir))
+
+            if cuda_lib_paths:
+                current_ld_path = os.environ.get('LD_LIBRARY_PATH', '')
+                new_paths = ':'.join(cuda_lib_paths)
+                new_ld_path = f"{new_paths}:{current_ld_path}" if current_ld_path else new_paths
+                os.environ['LD_LIBRARY_PATH'] = new_ld_path
+                log.info(f"Added PyTorch CUDA 12 libraries to LD_LIBRARY_PATH")
+                log.debug(f"CUDA library paths: {new_paths}")
+                break
+except Exception as e:
+    log.warning(f"Could not configure PyTorch CUDA library paths: {e}")
+
+# Check if CUDA is available before trying to use CUDA
+def check_cuda_available():
+    """Check if CUDA is available via ctranslate2"""
     try:
-        import ctypes
-        import ctypes.util
-        # Try to find cuDNN library
-        cudnn_lib = ctypes.util.find_library('cudnn')
-        if cudnn_lib:
-            log.info("cuDNN library found - CUDA acceleration available")
+        import ctranslate2
+        cuda_count = ctranslate2.get_cuda_device_count()
+        if cuda_count > 0:
+            log.info(f"CUDA available - {cuda_count} device(s) detected")
             return True
         else:
-            log.warning("cuDNN library not found - will use CPU mode")
+            log.info("No CUDA devices found - will use CPU mode")
             return False
     except Exception as e:
-        log.warning(f"Error checking cuDNN: {e} - will use CPU mode")
+        log.warning(f"Error checking CUDA availability: {e} - will use CPU mode")
         return False
 
-# Force CPU mode if cuDNN is not available to prevent CTranslate2 crashes
-if not check_cudnn_available():
-    log.info("Setting CUDA_VISIBLE_DEVICES=-1 to force CPU mode")
-    os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+# Check CUDA availability using ctranslate2
+CUDA_AVAILABLE = check_cuda_available()
+if not CUDA_AVAILABLE:
+    log.info("CUDA not available - CPU mode will be used")
 
 try:
     from faster_whisper import WhisperModel
@@ -195,12 +215,12 @@ class PureRecorder:
             # Determine device
             if self.whisper_device == "auto":
                 try:
-                    import torch
-                    # Check if CUDA is available AND actually usable
-                    if torch.cuda.is_available():
+                    import ctranslate2
+                    # Check if CUDA is available via ctranslate2
+                    if ctranslate2.get_cuda_device_count() > 0:
                         try:
-                            # Try to actually use CUDA to verify it works
-                            _ = torch.cuda.get_device_name(0)
+                            # CUDA is available via ctranslate2
+                            log.info(f"Auto device selection: CUDA available with {ctranslate2.get_cuda_device_count()} device(s)")
                             device = "cuda"
                             log.info("CUDA detected and verified")
                         except Exception as cuda_error:
@@ -234,7 +254,7 @@ class PureRecorder:
                     self.whisper_model_size,
                     device=device,
                     download_root=model_path,
-                    local_files_only=False  # Allow downloading if not cached
+                    local_files_only=False
                 )
                 self.whisper_model_name = self.whisper_model_size
                 log.info(f"Whisper {self.whisper_model_size} model loaded successfully on {device}")
@@ -269,22 +289,43 @@ class PureRecorder:
                 # Fallback to tiny model if requested model fails
                 if self.whisper_model_size != "tiny":
                     log.warning("Falling back to tiny model...")
+                    # Try CPU first for tiny model if original device failed
+                    fallback_device = "cpu" if device == "cuda" else device
                     try:
                         self.whisper_model = WhisperModel(
                             "tiny",
-                            device=device,
+                            device=fallback_device,
                             download_root=model_path,
-                            local_files_only=False  # Allow downloading if not cached
+                            local_files_only=False
                         )
                         self.whisper_model_name = "tiny"
-                        log.info("Whisper tiny model loaded successfully (fallback)")
+                        log.info(f"Whisper tiny model loaded successfully on {fallback_device} (fallback)")
 
                         # Notify UI that loading completed
                         if self.model_loading_complete_callback:
                             self.model_loading_complete_callback()
                         return
                     except Exception as e2:
-                        log.error(f"Failed to load fallback tiny model: {e2}")
+                        log.error(f"Failed to load fallback tiny model on {fallback_device}: {e2}")
+
+                        # Last resort: try tiny on CPU if we haven't already
+                        if fallback_device != "cpu":
+                            log.warning("Trying tiny model on CPU as last resort...")
+                            try:
+                                self.whisper_model = WhisperModel(
+                                    "tiny",
+                                    device="cpu",
+                                    download_root=model_path,
+                                    local_files_only=False
+                                )
+                                self.whisper_model_name = "tiny"
+                                log.info("Whisper tiny model loaded successfully on CPU (last resort)")
+
+                                if self.model_loading_complete_callback:
+                                    self.model_loading_complete_callback()
+                                return
+                            except Exception as e3:
+                                log.error(f"Failed to load tiny model on CPU: {e3}")
 
             # If all fails, error out
             log.error("FATAL: Could not load any Whisper model")
@@ -1139,7 +1180,7 @@ class PureRecorder:
                         initial_prompt=vocab_prompt
                     )
                     log.debug(" WHISPER: Transcription completed, processing segments...")
-                    
+
                     text = "".join([segment.text for segment in segments]).strip()
                     language = info.language if hasattr(info, 'language') else "en"
                     
