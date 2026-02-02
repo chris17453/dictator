@@ -154,6 +154,42 @@ Access the settings panel by clicking the ⚙️ gear icon:
 - pynput ≥1.6.0
 - speechrecognition ≥3.8.0
 
+#### CUDA Support (Optional, for GPU Acceleration)
+
+For GPU-accelerated transcription, you need:
+
+- **NVIDIA GPU** with compute capability ≥7.0
+- **NVIDIA Drivers** (≥450.x)
+- **CUDA Toolkit** installed on your system
+
+**CUDA 12 vs CUDA 13 Compatibility:**
+
+DICTATOR uses `faster-whisper` which requires CUDA 12 libraries (`libcublas.so.12`, etc.). If you have CUDA 13 installed on your system, the application automatically handles this by using PyTorch's bundled CUDA 12 libraries.
+
+**Automatic Setup (Recommended):**
+
+DICTATOR includes PyTorch as a dependency, which bundles all necessary CUDA 12 libraries. The application automatically detects and configures these libraries at runtime - **no manual setup required**. Your system CUDA installation (whether 12 or 13) remains untouched.
+
+**Manual cuDNN Installation (Optional):**
+
+If you prefer to install CUDA 12 libraries system-wide:
+
+```bash
+# For systems with CUDA 13.x
+sudo dnf install libcudnn9-cuda-12  # Installs CUDA 12 libs alongside CUDA 13
+
+# For CUDA 12.x systems
+sudo dnf install libcudnn9-cuda-12
+
+# For Debian/Ubuntu
+sudo apt install libcudnn9-cuda-12
+```
+
+**Note:**
+- Installing CUDA 12 libraries on a CUDA 13 system is safe - they coexist without conflicts
+- If GPU acceleration fails, DICTATOR automatically falls back to CPU mode
+- Check logs in `~/.config/dictator/logs/` to verify GPU detection
+
 ### Development Setup
 
 ```bash
@@ -240,6 +276,24 @@ newgrp input
 - The window might be off-screen after resolution changes
 - Delete `~/.config/dictator/config.json` to reset window position
 - Or use `dictator --no-tray` to force window visibility
+
+**CUDA/GPU not working**:
+- Error: `Library libcublas.so.12 is not found or cannot be loaded`
+  - This means faster-whisper is looking for CUDA 12 libraries but can't find them
+  - **Solution**: DICTATOR automatically uses PyTorch's bundled CUDA 12 libraries
+  - If this fails, ensure PyTorch is properly installed: `uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu124`
+  - The bundled libraries work alongside any system CUDA version (12 or 13)
+- Error: `Unable to load any of {libcudnn_ops.so...}`
+  - Less common; usually means ctranslate2 needs additional libraries
+  - Install system CUDA 12 libraries: `sudo dnf install libcudnn9-cuda-12` (safe to install alongside CUDA 13)
+- Error: `no kernel image is available for execution on the device`
+  - Your GPU is too new for the current PyTorch version
+  - For RTX 50-series GPUs: Use PyTorch nightly (already configured in dependencies)
+  - App will automatically fall back to CPU if GPU incompatibility is detected
+- Verify CUDA detection:
+  - Check logs in `~/.config/dictator/logs/` for "CUDA available" and "Added PyTorch CUDA 12 libraries" messages
+  - Look for "Using GPU: [your GPU name]" in startup logs
+  - App will automatically fall back to CPU if CUDA fails (no errors, just slower)
 
 ### Getting Help
 

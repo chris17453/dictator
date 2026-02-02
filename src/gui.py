@@ -12,13 +12,19 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 try:
     from src.dictator import DictatorWindow
+    from src import logger
 except ImportError:
     from .dictator import DictatorWindow
+    from . import logger
+
+# Initialize logging
+logger.setup_logging()
+log = logger.get_logger(__name__)
 
 
 def signal_handler(signum, frame):
     """Handle termination signals"""
-    print(f"🚨 Received signal {signum}, shutting down gracefully...")
+    log.info(f"Received signal {signum}, shutting down gracefully")
     QApplication.quit()
 
 
@@ -40,20 +46,20 @@ def set_app_icon():
                 with pkg_resources.path("src.icons", f"dictator-{size}.png") as icon_path:
                     if icon_path.exists():
                         app_icon.addFile(str(icon_path), QSize(int(size), int(size)))
-                        print(f"🎯 Added app icon size {size}x{size} from package")
+                        log.debug(f"Added app icon size {size}x{size} from package")
                         icon_loaded = True
-            except:
-                pass
+            except (FileNotFoundError, AttributeError, OSError) as e:
+                log.debug(f"Could not load icon size {size}x{size} from package: {e}")
         
         # Try main icon too
         try:
             with pkg_resources.path("src.icons", "dictator.png") as icon_path:
                 if icon_path.exists():
                     app_icon.addFile(str(icon_path))
-                    print(f"🎯 Added main app icon from package")
+                    log.debug("Added main app icon from package")
                     icon_loaded = True
-        except:
-            pass
+        except (FileNotFoundError, AttributeError, OSError) as e:
+            log.debug(f"Could not load main app icon from package: {e}")
             
     except ImportError:
         pass
@@ -68,14 +74,14 @@ def set_app_icon():
             icon_path = icons_dir / f"dictator-{size}.png"
             if icon_path.exists():
                 app_icon.addFile(str(icon_path), QSize(int(size), int(size)))
-                print(f"🎯 Added app icon size {size}x{size} from dev path")
+                log.debug(f"Added app icon size {size}x{size} from dev path")
                 icon_loaded = True
         
         # Try main icon
         main_icon = icons_dir / "dictator.png"
         if main_icon.exists():
             app_icon.addFile(str(main_icon))
-            print(f"🎯 Added main app icon from dev path")
+            log.debug("Added main app icon from dev path")
             icon_loaded = True
     
     return app_icon if icon_loaded else None
@@ -94,33 +100,13 @@ def start_gui(no_tray=False):
 
     window = None
 
-    def monitor_main_thread(window):
-        """Monitor main thread for crashes"""
-        import time
-
-        while True:
-            time.sleep(0.5)  # Check every 500ms
-            try:
-                if not window or not hasattr(window, 'isVisible'):
-                    print("🚨 MONITOR: Window object invalid! Force killing process...")
-                    import os
-                    os._exit(1)
-            except RuntimeError as e:
-                print(f"🚨 MONITOR: Window RuntimeError: {e}! Force killing process...")
-                import os
-                os._exit(1)
-            except Exception as e:
-                print(f"🚨 MONITOR: Window exception: {e}! Force killing process...")
-                import os
-                os._exit(1)
-
     try:
-        print("🚀 Starting Qt application...")
+        log.info("Starting Qt application")
         app = QApplication(sys.argv)
         app.setQuitOnLastWindowClosed(True)
         
         # Set application icon with GNOME compatibility
-        print("🚀 Setting application icon...")
+        log.debug("Setting application icon")
         app_icon = set_app_icon()
         if app_icon:
             # Set icon for the application globally
@@ -132,60 +118,51 @@ def start_gui(no_tray=False):
             app.setOrganizationName("DICTATOR")
             app.setOrganizationDomain("dictator")
             app.setDesktopFileName("dictator")  # Links to the .desktop file
-            
-            print("✅ Multi-size application icon set for GNOME compatibility")
+
+            log.info("Multi-size application icon set for GNOME compatibility")
         
         # Set GNOME application properties for proper integration
         # These properties help GNOME match the running app to the desktop file
         
         if not app_icon:
-            print("⚠️ No application icon found")
-        
-        print("🚀 Creating main window...")
+            log.warning("No application icon found")
+
+        log.info("Creating main window")
         window = DictatorWindow(no_tray=no_tray)
-        
-        print("🚀 Setting up app quit handler...")
+
+        log.debug("Setting up app quit handler")
         def on_app_quit():
-            print("🚨 Application quitting via signal...")
+            log.info("Application quitting via signal")
             try:
                 if window and hasattr(window, 'close_application') and not getattr(window, 'is_closing', False):
                     window.close_application()
             except Exception as e:
-                print(f"🚨 Error during quit: {e}")
+                log.error(f"Error during quit: {e}")
         
         app.aboutToQuit.connect(on_app_quit)
-        
-        print("🚀 Showing window...")
+
+        log.info("Showing window")
         window.show()
-        
-        # Start monitoring thread to detect crashes
-        import threading
-        monitor_thread = threading.Thread(target=lambda: monitor_main_thread(window), daemon=True)
-        monitor_thread.start()
-        
+
         exit_code = app.exec()
-        print(f"🚨 App event loop ended with code: {exit_code}")
-        
+        log.info(f"App event loop ended with code: {exit_code}")
+
         # If we get here, the app closed normally
         if window and hasattr(window, 'close_application'):
             window.close_application()
-        
-        import os
-        os._exit(exit_code)
-        
+
+        sys.exit(exit_code)
+
     except Exception as e:
-        print(f"🚨 FATAL ERROR IN GUI: {e}")
-        import traceback
-        traceback.print_exc()
-        
+        log.critical(f"FATAL ERROR IN GUI: {e}", exc_info=True)
+
         if window and hasattr(window, 'close_application'):
             try:
                 window.close_application()
-            except:
-                pass
-        
-        import os
-        os._exit(1)
+            except Exception as cleanup_error:
+                log.error(f"Error during emergency window cleanup: {cleanup_error}", exc_info=True)
+
+        sys.exit(1)
 
 
 if __name__ == "__main__":

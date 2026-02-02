@@ -47,7 +47,7 @@ classifiers = [
 [project.optional-dependencies]
 whisper = [
     "faster-whisper>=0.10.0",
-    "torch>=1.10.0",
+    "torch>=2.0.0",
     "transformers>=4.20.0",
     "sentencepiece>=0.1.95",
     "numpy>=1.18.0",
@@ -96,8 +96,8 @@ packages = ["src"]
 "desktop/dictator.ico" = "share/pixmaps/dictator.ico"
 "scripts/setup-permissions.sh" = "share/dictator/setup-permissions.sh"
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=7.0.0",
     "black>=23.0.0",
     "isort>=5.12.0",

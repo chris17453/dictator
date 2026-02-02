@@ -3,6 +3,12 @@ import sys
 import json
 import os
 from pathlib import Path
+
+try:
+    from logger import get_logger
+except ImportError:
+    from .logger import get_logger
+log = get_logger(__name__)
 try:
     import importlib.resources as pkg_resources
 except ImportError:
@@ -138,10 +144,89 @@ class SettingsDialog(QDialog):
                 image: none;
                 border: none;
             }
+            QScrollBar:vertical {
+                background-color: #2a2a2a;
+                width: 28px;
+                margin: 16px 0px 16px 0px;
+                border-radius: 7px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #4CAF50;
+                min-height: 20px;
+                border-radius: 7px;
+                margin: 2px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #5CBF60;
+            }
+            QScrollBar::add-line:vertical {
+                background-color: #4CAF50;
+                height: 14px;
+                subcontrol-position: bottom;
+                subcontrol-origin: margin;
+                border: 1px solid #333;
+                border-bottom-left-radius: 7px;
+                border-bottom-right-radius: 7px;
+            }
+            QScrollBar::sub-line:vertical {
+                background-color: #4CAF50;
+                height: 14px;
+                subcontrol-position: top;
+                subcontrol-origin: margin;
+                border: 1px solid #333;
+                border-top-left-radius: 7px;
+                border-top-right-radius: 7px;
+            }
+            QScrollBar::add-line:vertical:hover, QScrollBar::sub-line:vertical:hover {
+                background-color: #5CBF60;
+            }
+            QScrollBar::up-arrow:vertical {
+                border: 2px solid white;
+                width: 3px;
+                height: 3px;
+                border-left: none;
+                border-right: none;
+                border-bottom: none;
+            }
+            QScrollBar::down-arrow:vertical {
+                border: 2px solid white;
+                width: 3px;
+                height: 3px;
+                border-left: none;
+                border-right: none;
+                border-top: none;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: none;
+            }
+            QScrollArea {
+                border: none;
+            }
         """)
         
         self.init_ui()
-    
+
+    def show_info_dialog(self, title, message):
+        """
+        Show information dialog, non-blocking in tests.
+
+        Args:
+            title: Dialog title
+            message: Information message
+        """
+        # Use non-blocking dialogs in tests to prevent blocking
+        if 'pytest' in sys.modules:
+            # Create and show non-blocking dialog
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Information)
+            msg.setWindowTitle(title)
+            msg.setText(message)
+            msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg.show()  # Non-blocking
+        else:
+            # Production: use blocking modal dialog
+            QMessageBox.information(self, title, message)
+
     def init_ui(self):
         """Initialize the settings UI"""
         layout = QVBoxLayout()
@@ -195,10 +280,284 @@ class SettingsDialog(QDialog):
         mic_row = QHBoxLayout()
         mic_row.addWidget(self.microphone_combo)
         mic_row.addWidget(refresh_btn)
-        
+
         mic_layout.addRow("Microphone:", mic_row)
+
+        # Sample rate selection
+        self.sample_rate_combo = QComboBox()
+        self.sample_rate_combo.addItem("Auto (Recommended)", "auto")
+        self.sample_rate_combo.addItem("48000 Hz (High Quality)", 48000)
+        self.sample_rate_combo.addItem("44100 Hz (CD Quality)", 44100)
+        self.sample_rate_combo.addItem("16000 Hz (Whisper Optimal)", 16000)
+        self.sample_rate_combo.addItem("22050 Hz (Lower Quality)", 22050)
+        self.sample_rate_combo.setStyleSheet(self.microphone_combo.styleSheet())
+        self.sample_rate_combo.setToolTip("Sample rate for audio recording. Auto will use device default. 16000 Hz is optimal for Whisper.")
+        mic_layout.addRow("Sample Rate:", self.sample_rate_combo)
+
         audio_layout.addWidget(mic_group)
-        
+
+        # Whisper Model Settings
+        whisper_group = QGroupBox("Whisper Model Settings")
+        whisper_layout = QFormLayout(whisper_group)
+
+        # Model selection dropdown
+        self.model_combo = QComboBox()
+        self.model_sizes = ['tiny', 'base', 'small', 'medium', 'large-v2', 'large-v3']
+        # Will populate with download status indicators
+        self._update_model_combo()
+        self.model_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+                min-height: 20px;
+            }
+            QComboBox::drop-down {
+                border: none;
+                background-color: #4CAF50;
+                width: 20px;
+                border-top-right-radius: 4px;
+                border-bottom-right-radius: 4px;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid white;
+                width: 0px;
+                height: 0px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #333;
+                color: white;
+                selection-background-color: #4CAF50;
+                border: 1px solid #4CAF50;
+            }
+        """)
+        self.model_combo.setToolTip("Choose Whisper model size (larger = more accurate but slower)")
+        whisper_layout.addRow("Model Size:", self.model_combo)
+
+        # Language selection dropdown
+        self.language_combo = QComboBox()
+        # Add common languages with display names
+        languages = [
+            ("auto", "Auto-detect"),
+            ("en", "English"),
+            ("es", "Spanish (Español)"),
+            ("fr", "French (Français)"),
+            ("de", "German (Deutsch)"),
+            ("it", "Italian (Italiano)"),
+            ("pt", "Portuguese (Português)"),
+            ("ru", "Russian (Русский)"),
+            ("zh", "Chinese (中文)"),
+            ("ja", "Japanese (日本語)"),
+            ("ko", "Korean (한국어)"),
+            ("ar", "Arabic (العربية)"),
+            ("hi", "Hindi (हिन्दी)"),
+            ("nl", "Dutch (Nederlands)"),
+            ("pl", "Polish (Polski)"),
+            ("tr", "Turkish (Türkçe)"),
+            ("sv", "Swedish (Svenska)"),
+            ("da", "Danish (Dansk)"),
+            ("no", "Norwegian (Norsk)"),
+            ("fi", "Finnish (Suomi)")
+        ]
+        for code, name in languages:
+            self.language_combo.addItem(name, code)
+
+        self.language_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+                min-height: 20px;
+            }
+            QComboBox::drop-down {
+                border: none;
+                background-color: #4CAF50;
+                width: 20px;
+                border-top-right-radius: 4px;
+                border-bottom-right-radius: 4px;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid white;
+                width: 0px;
+                height: 0px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #333;
+                color: white;
+                selection-background-color: #4CAF50;
+                border: 1px solid #4CAF50;
+            }
+        """)
+        self.language_combo.setToolTip("Select transcription language or use auto-detect")
+        whisper_layout.addRow("Language:", self.language_combo)
+
+        # Model directory selection
+        self.model_dir_input = QLineEdit()
+        self.model_dir_input.setPlaceholderText("~/.config/dictator/models")
+        self.model_dir_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+            }
+        """)
+
+        browse_btn = QPushButton("Browse...")
+        browse_btn.clicked.connect(self.browse_model_directory)
+
+        model_dir_row = QHBoxLayout()
+        model_dir_row.addWidget(self.model_dir_input)
+        model_dir_row.addWidget(browse_btn)
+
+        whisper_layout.addRow("Model Directory:", model_dir_row)
+
+        # Device selection (CPU/GPU)
+        self.device_combo = QComboBox()
+        self.device_combo.addItems(['auto', 'cpu', 'cuda'])
+        self.device_combo.setStyleSheet(self.model_combo.styleSheet())
+        self.device_combo.setToolTip("Choose processing device (auto, CPU, or CUDA GPU)")
+        whisper_layout.addRow("Compute Device:", self.device_combo)
+
+        # Confidence threshold setting
+        self.confidence_threshold_spin = QSpinBox()
+        self.confidence_threshold_spin.setRange(0, 100)
+        self.confidence_threshold_spin.setValue(50)
+        self.confidence_threshold_spin.setSuffix("%")
+        self.confidence_threshold_spin.setStyleSheet("""
+            QSpinBox {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+                padding-right: 20px;
+                min-width: 80px;
+            }
+            QSpinBox::up-button, QSpinBox::down-button {
+                background-color: #4CAF50;
+                border: none;
+                width: 16px;
+                subcontrol-origin: border;
+            }
+            QSpinBox::up-button {
+                subcontrol-position: top right;
+                border-top-right-radius: 3px;
+            }
+            QSpinBox::down-button {
+                subcontrol-position: bottom right;
+                border-bottom-right-radius: 3px;
+            }
+        """)
+        self.confidence_threshold_spin.setToolTip("Show warning when transcription confidence falls below this threshold (0-100%)")
+        whisper_layout.addRow("Low Confidence Threshold:", self.confidence_threshold_spin)
+
+        # Custom vocabulary section
+        vocab_label = QLabel("Custom Vocabulary:")
+        vocab_label.setToolTip("Add custom words/phrases to improve recognition accuracy")
+        self.vocabulary_input = QLineEdit()
+        self.vocabulary_input.setPlaceholderText("Enter word or phrase...")
+        self.vocabulary_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+            }
+        """)
+
+        vocab_add_btn = QPushButton("Add")
+        vocab_add_btn.clicked.connect(self.add_vocabulary_term_ui)
+
+        vocab_input_row = QHBoxLayout()
+        vocab_input_row.addWidget(self.vocabulary_input)
+        vocab_input_row.addWidget(vocab_add_btn)
+
+        whisper_layout.addRow(vocab_label, vocab_input_row)
+
+        # Vocabulary display list
+        from PyQt6.QtWidgets import QListWidget
+        self.vocabulary_list = QListWidget()
+        self.vocabulary_list.setMaximumHeight(100)
+        self.vocabulary_list.setStyleSheet("""
+            QListWidget {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+            }
+        """)
+        whisper_layout.addRow("", self.vocabulary_list)
+
+        # Model download section
+        download_container = QWidget()
+        download_layout = QVBoxLayout(download_container)
+        download_layout.setContentsMargins(0, 10, 0, 0)
+
+        # Download button
+        self.download_model_btn = QPushButton("Download Selected Model")
+        self.download_model_btn.clicked.connect(self.download_whisper_model)
+        self.download_model_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                border-radius: 4px;
+                padding: 8px 16px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:disabled {
+                background-color: #666;
+                color: #999;
+            }
+        """)
+        self.download_model_btn.setToolTip("Download the selected Whisper model for offline use")
+        download_layout.addWidget(self.download_model_btn)
+
+        # Status label
+        self.download_status = QLabel("")
+        self.download_status.setStyleSheet("color: #ccc; font-size: 12px; padding: 5px;")
+        download_layout.addWidget(self.download_status)
+
+        # Progress bar
+        self.download_progress = QProgressBar()
+        self.download_progress.setRange(0, 100)
+        self.download_progress.setValue(0)
+        self.download_progress.setTextVisible(True)
+        self.download_progress.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                text-align: center;
+                background-color: #333;
+                color: white;
+            }
+            QProgressBar::chunk {
+                background-color: #4CAF50;
+            }
+        """)
+        self.download_progress.hide()  # Initially hidden
+        download_layout.addWidget(self.download_progress)
+
+        whisper_layout.addRow("", download_container)
+
+        audio_layout.addWidget(whisper_group)
+
         tabs.addTab(audio_tab, "Audio")
         
         # Appearance tab
@@ -337,6 +696,31 @@ class SettingsDialog(QDialog):
         self.translation_font_size_spin.setRange(8, 72)
         self.translation_font_size_spin.setValue(14)
         self.translation_font_size_spin.setSuffix("px")
+        self.translation_font_size_spin.setStyleSheet("""
+            QSpinBox {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+                padding-right: 20px;
+                min-width: 80px;
+            }
+            QSpinBox::up-button, QSpinBox::down-button {
+                background-color: #4CAF50;
+                border: none;
+                width: 16px;
+                subcontrol-origin: border;
+            }
+            QSpinBox::up-button {
+                subcontrol-position: top right;
+                border-top-right-radius: 3px;
+            }
+            QSpinBox::down-button {
+                subcontrol-position: bottom right;
+                border-bottom-right-radius: 3px;
+            }
+        """)
         self.translation_font_btn.clicked.connect(self.choose_translation_font)
         self.translation_font_size_spin.valueChanged.connect(self.update_translation_font_size)
         trans_font_layout.addWidget(trans_font_label)
@@ -352,6 +736,31 @@ class SettingsDialog(QDialog):
         self.history_font_size_spin.setRange(8, 72)
         self.history_font_size_spin.setValue(12)
         self.history_font_size_spin.setSuffix("px")
+        self.history_font_size_spin.setStyleSheet("""
+            QSpinBox {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+                padding-right: 20px;
+                min-width: 80px;
+            }
+            QSpinBox::up-button, QSpinBox::down-button {
+                background-color: #4CAF50;
+                border: none;
+                width: 16px;
+                subcontrol-origin: border;
+            }
+            QSpinBox::up-button {
+                subcontrol-position: top right;
+                border-top-right-radius: 3px;
+            }
+            QSpinBox::down-button {
+                subcontrol-position: bottom right;
+                border-bottom-right-radius: 3px;
+            }
+        """)
         self.history_font_btn.clicked.connect(self.choose_history_font)
         self.history_font_size_spin.valueChanged.connect(self.update_history_font_size)
         hist_font_layout.addWidget(hist_font_label)
@@ -383,8 +792,77 @@ class SettingsDialog(QDialog):
         hotkey_row.addWidget(change_hotkey_btn)
         
         hotkey_layout.addRow("Record Toggle:", hotkey_row)
+
+        # Recording mode selector
+        self.recording_mode_combo = QComboBox()
+        self.recording_mode_combo.addItem("Toggle Mode", "toggle")
+        self.recording_mode_combo.addItem("Push-to-Talk Mode", "push-to-talk")
+        self.recording_mode_combo.setToolTip("Toggle: Press key to start/stop. Push-to-talk: Hold key to record, release to stop")
+        hotkey_layout.addRow("Recording Mode:", self.recording_mode_combo)
+
+        # Recording timeout selector
+        self.timeout_combo = QComboBox()
+        self.timeout_combo.addItem("30 seconds", 30)
+        self.timeout_combo.addItem("1 minute", 60)
+        self.timeout_combo.addItem("2 minutes", 120)
+        self.timeout_combo.addItem("5 minutes", 300)
+        self.timeout_combo.addItem("10 minutes", 600)
+        self.timeout_combo.addItem("15 minutes", 900)
+        self.timeout_combo.addItem("30 minutes", 1800)
+        self.timeout_combo.setToolTip("Maximum recording duration before automatic stop")
+        hotkey_layout.addRow("Max Recording Time:", self.timeout_combo)
+
+        # Silence detection (VAD) checkbox
+        self.silence_detection_checkbox = QCheckBox("Enable silence detection")
+        self.silence_detection_checkbox.setToolTip("Automatically stop recording after detecting silence")
+        hotkey_layout.addRow("Auto-stop on silence:", self.silence_detection_checkbox)
+
+        # Silence threshold slider
+        self.silence_threshold_spin = QSpinBox()
+        self.silence_threshold_spin.setRange(1, 20)
+        self.silence_threshold_spin.setSuffix("%")
+        self.silence_threshold_spin.setStyleSheet("""
+            QSpinBox {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+                padding-right: 20px;
+                min-width: 80px;
+            }
+            QSpinBox::up-button, QSpinBox::down-button {
+                background-color: #4CAF50;
+                border: none;
+                width: 16px;
+                subcontrol-origin: border;
+            }
+            QSpinBox::up-button {
+                subcontrol-position: top right;
+                border-top-right-radius: 3px;
+            }
+            QSpinBox::down-button {
+                subcontrol-position: bottom right;
+                border-bottom-right-radius: 3px;
+            }
+        """)
+        self.silence_threshold_spin.setToolTip("Audio level below which is considered silence (1-20%)")
+        hotkey_layout.addRow("Silence threshold:", self.silence_threshold_spin)
+
+        # Silence duration combo
+        self.silence_duration_combo = QComboBox()
+        self.silence_duration_combo.addItem("1 second", 1.0)
+        self.silence_duration_combo.addItem("1.5 seconds", 1.5)
+        self.silence_duration_combo.addItem("2 seconds", 2.0)
+        self.silence_duration_combo.addItem("2.5 seconds", 2.5)
+        self.silence_duration_combo.addItem("3 seconds", 3.0)
+        self.silence_duration_combo.addItem("4 seconds", 4.0)
+        self.silence_duration_combo.addItem("5 seconds", 5.0)
+        self.silence_duration_combo.setToolTip("How long to wait before stopping after silence is detected")
+        hotkey_layout.addRow("Silence duration:", self.silence_duration_combo)
+
         hotkeys_layout.addWidget(hotkey_group)
-        
+
         tabs.addTab(hotkeys_tab, "Hotkeys")
         
         # History management tab
@@ -430,7 +908,7 @@ class SettingsDialog(QDialog):
         clear_session_btn.clicked.connect(self.clear_current_session)
         clear_session_btn.setStyleSheet("QPushButton { background-color: #FF9800; }")
         
-        clear_all_btn = QPushButton("⚠️ Clear All History")
+        clear_all_btn = QPushButton("Clear All History")
         clear_all_btn.clicked.connect(self.clear_all_history)
         clear_all_btn.setStyleSheet("QPushButton { background-color: #f44336; }")
         
@@ -442,7 +920,38 @@ class SettingsDialog(QDialog):
         history_layout.addWidget(actions_group)
         
         tabs.addTab(history_tab, "History")
-        
+
+        # Advanced tab
+        advanced_tab = QWidget()
+        advanced_layout = QVBoxLayout(advanced_tab)
+
+        # Logging settings
+        logging_group = QGroupBox("Logging Settings")
+        logging_layout = QVBoxLayout(logging_group)
+
+        # Debug mode checkbox
+        self.debug_mode_checkbox = QCheckBox("Enable debug logging")
+        self.debug_mode_checkbox.setToolTip(
+            "Enable detailed debug logging for troubleshooting.\n"
+            "Debug logs include verbose information about app operations."
+        )
+        self.debug_mode_checkbox.stateChanged.connect(self.toggle_debug_mode)
+        logging_layout.addWidget(self.debug_mode_checkbox)
+
+        # Debug info label
+        debug_info = QLabel(
+            "Debug mode provides detailed logging information useful for troubleshooting.\n"
+            "Normal operation uses INFO level logging."
+        )
+        debug_info.setStyleSheet("color: #999; font-size: 11px; padding: 5px;")
+        debug_info.setWordWrap(True)
+        logging_layout.addWidget(debug_info)
+
+        advanced_layout.addWidget(logging_group)
+        advanced_layout.addStretch()
+
+        tabs.addTab(advanced_tab, "Advanced")
+
         layout.addWidget(tabs)
         
         # Dialog buttons
@@ -459,7 +968,10 @@ class SettingsDialog(QDialog):
         
         # Load current settings
         self.load_current_settings()
-        
+
+        # Load vocabulary into list
+        self.refresh_vocabulary_list()
+
         # Initial microphone refresh
         QTimer.singleShot(100, self.refresh_microphones)
     
@@ -506,13 +1018,47 @@ class SettingsDialog(QDialog):
         if hasattr(self.parent_window, 'hotkey_manager'):
             current_hotkey_string = self.parent_window.hotkey_manager.get_hotkey_string()
             self.hotkey_label.setText(current_hotkey_string)
-        
+
+        # Load recording mode
+        if hasattr(self.parent_window, 'recording_mode'):
+            mode = self.parent_window.recording_mode
+            for i in range(self.recording_mode_combo.count()):
+                if self.recording_mode_combo.itemData(i) == mode:
+                    self.recording_mode_combo.setCurrentIndex(i)
+                    break
+
+        # Load recording timeout
+        if hasattr(self.parent_window, 'recording_timeout'):
+            timeout = self.parent_window.recording_timeout
+            for i in range(self.timeout_combo.count()):
+                if self.timeout_combo.itemData(i) == timeout:
+                    self.timeout_combo.setCurrentIndex(i)
+                    break
+
+        # Load silence detection settings
+        if hasattr(self.parent_window, 'silence_detection_enabled'):
+            self.silence_detection_checkbox.setChecked(self.parent_window.silence_detection_enabled)
+
+        if hasattr(self.parent_window, 'silence_threshold'):
+            self.silence_threshold_spin.setValue(self.parent_window.silence_threshold)
+
+        if hasattr(self.parent_window, 'silence_duration'):
+            duration = self.parent_window.silence_duration
+            for i in range(self.silence_duration_combo.count()):
+                if self.silence_duration_combo.itemData(i) == duration:
+                    self.silence_duration_combo.setCurrentIndex(i)
+                    break
+
+        # Load debug mode setting
+        if hasattr(self.parent_window, 'debug_mode_enabled'):
+            self.debug_mode_checkbox.setChecked(self.parent_window.debug_mode_enabled)
+
         # Load current opacity (if slider exists)
         if hasattr(self, 'opacity_slider') and hasattr(self.parent_window, 'current_opacity_percent'):
             current_opacity = self.parent_window.current_opacity_percent
             self.opacity_slider.setValue(current_opacity)
             self.opacity_label.setText(f"Opacity: {current_opacity}%")
-            print(f"🔥 SETTINGS: Loaded opacity slider value: {current_opacity}%")
+            log.info(f"SETTINGS: Loaded opacity slider value: {current_opacity}%")
         
         # Load current microphone selection
         if hasattr(self.parent_window, 'recorder') and hasattr(self.parent_window.recorder, 'current_microphone_index'):
@@ -523,9 +1069,18 @@ class SettingsDialog(QDialog):
                     item_data = self.microphone_combo.itemData(i)
                     if item_data == current_mic_index:
                         self.microphone_combo.setCurrentIndex(i)
-                        print(f"🔥 SETTINGS: Set microphone combo to index {i} for device {current_mic_index}")
+                        log.debug(f"SETTINGS: Set microphone combo to index {i} for device {current_mic_index}")
                         break
-        
+
+        # Load current sample rate selection
+        if hasattr(self.parent_window, 'sample_rate'):
+            current_sample_rate = self.parent_window.sample_rate
+            for i in range(self.sample_rate_combo.count()):
+                if self.sample_rate_combo.itemData(i) == current_sample_rate:
+                    self.sample_rate_combo.setCurrentIndex(i)
+                    log.debug(f"SETTINGS: Set sample rate combo to index {i} for rate {current_sample_rate}")
+                    break
+
         # Load current colors into buttons
         if hasattr(self.parent_window, 'custom_bg_color'):
             bg_color = QColor(self.parent_window.custom_bg_color)
@@ -569,7 +1124,10 @@ class SettingsDialog(QDialog):
         if hasattr(self.parent_window, 'custom_history_font_family'):
             self.history_font_btn.setText(f"🔤 {self.parent_window.custom_history_font_family}")
             self.history_font_size_spin.setValue(getattr(self.parent_window, 'custom_history_font_size', 12))
-        
+
+        # Load Whisper model settings
+        self.load_whisper_settings()
+
         # Update history stats
         self.update_history_stats()
     
@@ -586,14 +1144,399 @@ class SettingsDialog(QDialog):
                 
                 # Add item with device index as data
                 self.microphone_combo.addItem(f"[{device_index}] {device_name}", device_index)
-                print(f"🔥 REFRESH_MIC: Added device {device_index}: {device_name}")
+                log.debug(f"REFRESH_MIC: Added device {device_index}: {device_name}")
                 
                 # Select current microphone
                 if hasattr(self.parent_window.recorder, 'current_microphone_index'):
                     if device_index == self.parent_window.recorder.current_microphone_index:
                         self.microphone_combo.setCurrentIndex(i)
-                        print(f"🔥 REFRESH_MIC: Selected current device at combo index {i}")
-    
+                        log.debug(f"REFRESH_MIC: Selected current device at combo index {i}")
+
+    def browse_model_directory(self):
+        """Browse for model directory"""
+        from PyQt6.QtWidgets import QFileDialog
+
+        current_dir = self.model_dir_input.text() or str(Path.home() / ".config" / "dictator" / "models")
+        directory = QFileDialog.getExistingDirectory(
+            self,
+            "Select Whisper Model Directory",
+            current_dir
+        )
+
+        if directory:
+            self.model_dir_input.setText(directory)
+
+    def add_vocabulary_term_ui(self):
+        """Add vocabulary term from UI input"""
+        term = self.vocabulary_input.text().strip()
+        if term and self.parent_window:
+            self.parent_window.add_vocabulary_term(term)
+            self.vocabulary_input.clear()
+            self.refresh_vocabulary_list()
+
+    def refresh_vocabulary_list(self):
+        """Refresh the vocabulary list display"""
+        if not self.parent_window:
+            return
+
+        self.vocabulary_list.clear()
+        for term in self.parent_window.custom_vocabulary:
+            self.vocabulary_list.addItem(term)
+
+    def download_whisper_model(self):
+        """Download the selected Whisper model"""
+        from pathlib import Path
+
+        # Import thread pool from dictator module
+        try:
+            from dictator import thread_pool
+        except ImportError:
+            from .dictator import thread_pool
+
+        # Get selected model and directory
+        # Get the actual model size from item data (without the ✓ indicator)
+        current_index = self.model_combo.currentIndex()
+        model_size = self.model_combo.itemData(current_index)
+        if not model_size:  # Fallback to text if no data
+            model_size = self.model_combo.currentText().replace(" ✓", "")
+
+        model_dir = self.model_dir_input.text() or str(Path.home() / ".config" / "dictator" / "models")
+        device = self.device_combo.currentText()
+
+        # Create model directory if it doesn't exist
+        try:
+            Path(model_dir).mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            log.error(f"Failed to create model directory: {e}")
+            if self.parent_window and hasattr(self.parent_window, 'show_error_dialog'):
+                self.parent_window.show_error_dialog(
+                    "Download Error",
+                    f"Could not create model directory.\n\n"
+                    f"Error: {e}\n\n"
+                    f"Please check permissions on: {model_dir}"
+                )
+            return
+
+        log.info(f"Starting download of Whisper {model_size} model to {model_dir}")
+
+        # Update UI for download start
+        self.download_model_btn.setEnabled(False)
+        self.download_status.setText(f"Downloading {model_size} model...")
+        # Set to indeterminate mode immediately (no progress info available from faster-whisper)
+        self.download_progress.setRange(0, 0)  # Indeterminate animation
+        self.download_progress.show()
+
+        # Force UI update
+        QApplication.processEvents()
+
+        # Download in thread pool to avoid freezing UI
+        def download_task():
+            try:
+                import os
+                import ssl
+                import warnings
+
+                # SSL workaround - Set environment variables BEFORE any imports
+                # This is the only way that works with newer httpcore/huggingface_hub
+                os.environ['CURL_CA_BUNDLE'] = ''
+                os.environ['REQUESTS_CA_BUNDLE'] = ''
+                os.environ['SSL_CERT_FILE'] = ''
+                os.environ['SSL_NO_VERIFY'] = '1'
+
+                # Also set Python's SSL context
+                try:
+                    ssl._create_default_https_context = ssl._create_unverified_context
+                    warnings.filterwarnings('ignore', message='Unverified HTTPS request')
+                    log.debug("SSL verification disabled via environment variables and SSL context")
+                except Exception as e:
+                    log.warning(f"Could not modify SSL context: {e}")
+
+                # Import after setting environment variables
+                from faster_whisper import WhisperModel
+                from PyQt6.QtCore import QTimer
+
+                # Aggressive monkey-patching to disable SSL verification
+                try:
+                    # Patch urllib3 (used by requests and others)
+                    import urllib3
+                    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+                    log.debug("Disabled urllib3 SSL warnings")
+                except Exception as e:
+                    log.warning(f"Could not disable urllib3 warnings: {e}")
+
+                try:
+                    # Monkey-patch httpcore's sync SSL stream creation
+                    import httpcore._backends.sync as httpcore_sync
+
+                    original_start_tls = httpcore_sync.SyncStream.start_tls
+
+                    def patched_start_tls(self, ssl_context, server_hostname=None, timeout=None):
+                        # Create unverified SSL context
+                        unverified_context = ssl.create_default_context()
+                        unverified_context.check_hostname = False
+                        unverified_context.verify_mode = ssl.CERT_NONE
+                        return original_start_tls(self, unverified_context, server_hostname, timeout)
+
+                    httpcore_sync.SyncStream.start_tls = patched_start_tls
+                    log.info("Successfully monkey-patched httpcore TLS verification")
+                except Exception as e:
+                    log.warning(f"Could not monkey-patch httpcore TLS: {e}")
+
+                # Determine device
+                if device == "auto":
+                    try:
+                        import ctranslate2
+                        actual_device = "cuda" if ctranslate2.get_cuda_device_count() > 0 else "cpu"
+                        log.debug(f"Auto device selection: {actual_device} (CUDA devices: {ctranslate2.get_cuda_device_count()})")
+                    except ImportError:
+                        actual_device = "cpu"
+                        log.warning("ctranslate2 not available, using CPU")
+                else:
+                    actual_device = device
+
+                log.info(f"Downloading model with device={actual_device}, download_root={model_dir}")
+
+                # Create a flag and timer reference to track download progress
+                download_active = [True]
+                dots = [0]
+                status_timer = [None]  # Store timer reference so we can cancel it
+
+                # Periodic status update to show download is alive
+                def update_status():
+                    if not download_active[0]:
+                        return  # Stop if download is no longer active
+
+                    dots[0] = (dots[0] + 1) % 4
+                    dot_text = "." * dots[0]
+                    self.download_status.setText(f"Downloading {model_size} model{dot_text}")
+
+                    # Schedule next update
+                    status_timer[0] = QTimer.singleShot(500, update_status)
+
+                # Start status updates (on main thread)
+                QTimer.singleShot(500, update_status)
+
+                # Create WhisperModel - this triggers download if not present
+                # Note: faster_whisper doesn't provide progress callbacks
+                log.info(f"Initiating WhisperModel download (this may take several minutes)...")
+
+                model = WhisperModel(
+                    model_size,
+                    device=actual_device,
+                    download_root=model_dir
+                )
+
+                # Stop status updates BEFORE scheduling UI update
+                download_active[0] = False
+                log.debug("Download complete - stopping animated status updates")
+
+                # If we got here, download succeeded
+                log.info(f"Successfully downloaded {model_size} model")
+
+                # Small delay to ensure any pending status updates complete
+                # Then update UI on main thread
+                QTimer.singleShot(100, lambda: self._on_download_complete(model_size))
+
+            except Exception as e:
+                log.error(f"Failed to download model: {e}")
+
+                # Show error dialog on main thread using QTimer
+                QTimer.singleShot(0, lambda: self._on_download_error(str(e)))
+
+        # Submit to thread pool
+        thread_pool.submit(download_task)
+
+    def _on_download_complete(self, model_size):
+        """Called when download completes successfully"""
+        log.info(f"Download of {model_size} model complete - updating UI")
+
+        # Stop progress bar animation and show completion
+        self.download_progress.setRange(0, 100)
+        self.download_progress.setValue(100)
+        self.download_status.setText(f"✓ {model_size} model downloaded successfully!")
+        self.download_status.setStyleSheet("color: #4CAF50; font-size: 12px; padding: 5px;")
+
+        # Force UI update immediately
+        QApplication.processEvents()
+        log.debug("Progress bar and status updated to show completion")
+
+        # Re-enable button after 2 seconds
+        QTimer.singleShot(2000, self._reset_download_ui)
+
+        # Show success message (non-blocking)
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Icon.Information)
+        msg_box.setWindowTitle("Download Complete")
+        msg_box.setText(f"Whisper {model_size} model downloaded successfully!")
+        msg_box.setInformativeText("The model is now ready to use.")
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg_box.setModal(False)  # Non-blocking
+        msg_box.show()
+        log.info("Download completion dialog displayed")
+
+    def _on_download_error(self, error_msg):
+        """Called when download fails"""
+        log.error(f"Download error: {error_msg}")
+
+        # Update UI
+        self.download_progress.hide()
+        self.download_status.setText(f"✗ Download failed")
+        self.download_status.setStyleSheet("color: #f44336; font-size: 12px; padding: 5px;")
+        self.download_model_btn.setEnabled(True)
+
+        # Show error dialog - use QMessageBox directly for better visibility
+        from PyQt6.QtWidgets import QMessageBox
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Icon.Critical)
+        msg_box.setWindowTitle("Model Download Failed")
+
+        # Create more helpful error message based on error type
+        if "SSL" in error_msg or "certificate" in error_msg.lower():
+            detailed_msg = (
+                f"Could not download Whisper model due to SSL certificate issues.\n\n"
+                f"Error: {error_msg}\n\n"
+                f"This has been worked around - please try downloading again.\n\n"
+                f"If the problem persists, please check:\n"
+                f"• Your internet connection is active\n"
+                f"• Your system's CA certificates are up to date"
+            )
+        else:
+            detailed_msg = (
+                f"Could not download Whisper model.\n\n"
+                f"Error: {error_msg}\n\n"
+                f"Please check:\n"
+                f"• Internet connection is active\n"
+                f"• Disk space is sufficient\n"
+                f"• Directory permissions are correct"
+            )
+
+        msg_box.setText(detailed_msg)
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+
+        # Make sure dialog appears on top
+        msg_box.setWindowModality(Qt.WindowModality.ApplicationModal)
+        msg_box.raise_()
+        msg_box.activateWindow()
+
+        # Show dialog (non-blocking in tests, blocking otherwise)
+        import sys
+        if 'pytest' not in sys.modules:
+            msg_box.exec()
+        else:
+            msg_box.show()
+
+        log.info("Error dialog displayed to user")
+
+    def _check_model_downloaded(self, model_size: str) -> bool:
+        """Check if a specific model is already downloaded"""
+        from pathlib import Path
+
+        # Handle case where model_dir_input doesn't exist yet during initialization
+        if hasattr(self, 'model_dir_input') and self.model_dir_input.text():
+            model_dir = self.model_dir_input.text()
+        else:
+            model_dir = str(Path.home() / ".config" / "dictator" / "models")
+
+        model_dir_path = Path(model_dir)
+
+        if not model_dir_path.exists():
+            return False
+
+        # faster-whisper stores models as: models--Systran--faster-whisper-{size}
+        model_folder_name = f"models--Systran--faster-whisper-{model_size}"
+        model_path = model_dir_path / model_folder_name
+
+        return model_path.exists() and model_path.is_dir()
+
+    def _update_model_combo(self):
+        """Update model combo box with download status indicators"""
+        current_text = self.model_combo.currentText()
+        # Remove download indicator if present
+        if " ✓" in current_text:
+            current_text = current_text.replace(" ✓", "")
+
+        self.model_combo.clear()
+
+        for model_size in self.model_sizes:
+            is_downloaded = self._check_model_downloaded(model_size)
+            display_text = f"{model_size} ✓" if is_downloaded else model_size
+            self.model_combo.addItem(display_text, model_size)  # Store actual size as data
+
+        # Restore selection
+        for i in range(self.model_combo.count()):
+            if self.model_combo.itemData(i) == current_text or self.model_combo.itemText(i).startswith(current_text):
+                self.model_combo.setCurrentIndex(i)
+                break
+
+    def _reset_download_ui(self):
+        """Reset download UI to initial state"""
+        self.download_progress.hide()
+        self.download_status.setText("")
+        self.download_status.setStyleSheet("color: #ccc; font-size: 12px; padding: 5px;")
+        self.download_model_btn.setEnabled(True)
+
+        # Update model combo to reflect newly downloaded model
+        self._update_model_combo()
+
+    def load_whisper_settings(self):
+        """Load Whisper model settings from parent window config"""
+        if not self.parent_window:
+            return
+
+        # Load model size - search by item data, not text (text may have checkmark)
+        model_size = getattr(self.parent_window, 'whisper_model_size', 'tiny')
+        for i in range(self.model_combo.count()):
+            if self.model_combo.itemData(i) == model_size:
+                self.model_combo.setCurrentIndex(i)
+                break
+
+        # Load model directory
+        model_dir = getattr(self.parent_window, 'whisper_model_dir',
+                           str(Path.home() / ".config" / "dictator" / "models"))
+        self.model_dir_input.setText(model_dir)
+
+        # Load device
+        device = getattr(self.parent_window, 'whisper_device', 'auto')
+        index = self.device_combo.findText(device)
+        if index >= 0:
+            self.device_combo.setCurrentIndex(index)
+
+        # Load language
+        language = getattr(self.parent_window, 'whisper_language', 'auto')
+        # Find by data (language code), not text (display name)
+        for i in range(self.language_combo.count()):
+            if self.language_combo.itemData(i) == language:
+                self.language_combo.setCurrentIndex(i)
+                break
+
+    def save_whisper_settings(self):
+        """Save Whisper model settings to parent window"""
+        if not self.parent_window:
+            return
+
+        # Use itemData to get actual model size without checkmark
+        current_index = self.model_combo.currentIndex()
+        model_size = self.model_combo.itemData(current_index)
+        if not model_size:  # Fallback
+            model_size = self.model_combo.currentText().replace(" ✓", "")
+        self.parent_window.whisper_model_size = model_size
+        self.parent_window.whisper_model_dir = self.model_dir_input.text()
+        self.parent_window.whisper_device = self.device_combo.currentText()
+        self.parent_window.whisper_language = self.language_combo.currentData()  # Use data (code), not text (display name)
+
+        # Trigger model reload if recorder exists
+        if hasattr(self.parent_window, 'recorder'):
+            self.parent_window.recorder.whisper_model_size = self.parent_window.whisper_model_size
+            self.parent_window.recorder.whisper_model_dir = self.parent_window.whisper_model_dir
+            self.parent_window.recorder.whisper_device = self.parent_window.whisper_device
+            self.parent_window.recorder.whisper_language = self.parent_window.whisper_language
+            log.info(f"Updated Whisper settings: model={self.parent_window.whisper_model_size}, dir={self.parent_window.whisper_model_dir}, device={self.parent_window.whisper_device}, language={self.parent_window.whisper_language}")
+
+            # Reload the model with new settings
+            log.info("Reloading Whisper model with new settings...")
+            self.parent_window.recorder.load_whisper_model()
+            log.info("Whisper model reloaded successfully")
+
     def update_opacity_alpha(self, value):
         """Update opacity using alpha channel (actually works!)"""
         self.opacity_label.setText(f"Opacity: {value}%")
@@ -787,8 +1730,8 @@ class SettingsDialog(QDialog):
                 self.parent_window.current_hotkey = dialog.captured_keys
                 self.parent_window.hotkey_manager.set_hotkey(dialog.captured_keys)
                 self.parent_window.save_config()  # Save immediately
-                
-                QMessageBox.information(self, "Hotkey Changed", 
+
+                self.show_info_dialog("Hotkey Changed",
                     f"Hotkey successfully changed to: {new_hotkey}\n\n"
                     "The new hotkey is now active and has been saved!")
     
@@ -835,7 +1778,7 @@ class SettingsDialog(QDialog):
         self.session_name_input.clear()
         
         self.update_history_stats()
-        QMessageBox.information(self, "New Session Started", f"Started new session: {session_name}")
+        self.show_info_dialog("New Session Started", f"Started new session: {session_name}")
     
     def export_history(self):
         """Export history to file"""
@@ -884,7 +1827,7 @@ class SettingsDialog(QDialog):
                     for entry in export_data['total_history']:
                         f.write(f"• {entry}\n")
             
-            QMessageBox.information(self, "Export Complete", f"History exported to:\n{filename}")
+            self.show_info_dialog("Export Complete", f"History exported to:\n{filename}")
         except Exception as e:
             QMessageBox.critical(self, "Export Failed", f"Failed to export history:\n{str(e)}")
     
@@ -901,15 +1844,15 @@ class SettingsDialog(QDialog):
         if reply == QMessageBox.StandardButton.Yes:
             self.parent_window.current_session_history = []
             self.update_history_stats()
-            QMessageBox.information(self, "Session Cleared", f"Current session '{current_session}' has been cleared.")
+            self.show_info_dialog("Session Cleared", f"Current session '{current_session}' has been cleared.")
     
     def clear_all_history(self):
         """Clear all history"""
         if not self.parent_window:
             return
         
-        reply = QMessageBox.question(self, "Clear All History", 
-            "⚠️ WARNING: This will permanently delete ALL history including all sessions!\n\n"
+        reply = QMessageBox.question(self, "Clear All History",
+            "WARNING: This will permanently delete ALL history including all sessions!\n\n"
             "This action cannot be undone. Are you sure?")
         
         if reply == QMessageBox.StandardButton.Yes:
@@ -927,7 +1870,7 @@ class SettingsDialog(QDialog):
             
             self.parent_window.save_config()
             self.update_history_stats()
-            QMessageBox.information(self, "History Cleared", "All history has been permanently deleted.")
+            self.show_info_dialog("History Cleared", "All history has been permanently deleted.")
     
     def choose_background_color(self):
         """Choose background color with 0.1%-100% brightness gradients (21 levels for extra darkness)"""
@@ -1233,7 +2176,7 @@ class SettingsDialog(QDialog):
             # Apply reset fonts immediately
             self.parent_window.apply_custom_colors()
             
-            QMessageBox.information(self, "Colors Reset", "Colors have been reset to defaults.")
+            self.show_info_dialog("Colors Reset", "Colors have been reset to defaults.")
     
     def generate_color_gradient(self, base_colors, levels=21):
         """Generate color gradients from 0.1% to 100% brightness for given base colors (21 levels for extra dark shades)"""
@@ -1252,8 +2195,32 @@ class SettingsDialog(QDialog):
                 gradient_colors.append((new_r << 16) | (new_g << 8) | new_b)
         return gradient_colors[:63]  # Limit to 63 colors max (3 colors × 21 levels)
     
-    def accept_settings(self):
-        """Apply settings and close dialog"""
+    def toggle_debug_mode(self, state):
+        """
+        Handle debug mode checkbox toggle.
+        Updates log level immediately when checkbox is changed.
+
+        Args:
+            state: Qt.CheckState value (0=unchecked, 2=checked)
+        """
+        from src import logger
+
+        # state = 2 means checked, 0 means unchecked
+        debug_enabled = (state == 2)
+
+        if debug_enabled:
+            logger.set_log_level('DEBUG')
+            log.info("Debug mode enabled - log level set to DEBUG")
+        else:
+            logger.set_log_level('INFO')
+            log.info("Debug mode disabled - log level set to INFO")
+
+        # Save to parent window
+        if self.parent_window:
+            self.parent_window.debug_mode_enabled = debug_enabled
+
+    def apply_settings(self):
+        """Apply settings without closing dialog"""
         if not self.parent_window:
             return
             
@@ -1274,20 +2241,68 @@ class SettingsDialog(QDialog):
             if device_index is not None:
                 success = self.parent_window.recorder.set_microphone(device_index)
                 if success:
-                    print(f"🔥 SETTINGS: Applied microphone selection: device index {device_index}")
+                    log.info(f"SETTINGS: Applied microphone selection: device index {device_index}")
+                    # Update the microphone label on the main UI
+                    if hasattr(self.parent_window, 'update_microphone_label'):
+                        self.parent_window.update_microphone_label()
                     # Save config immediately to persist the change
                     self.parent_window.save_config()
                 else:
-                    print(f"🚨 SETTINGS: Failed to apply microphone selection: device index {device_index}")
-        
+                    log.error(f"SETTINGS: Failed to apply microphone selection: device index {device_index}")
+
+        # Apply sample rate selection
+        if hasattr(self, 'sample_rate_combo'):
+            selected_sample_rate = self.sample_rate_combo.currentData()
+            if selected_sample_rate is not None:
+                self.parent_window.sample_rate = selected_sample_rate
+                # Also update the recorder's configured sample rate
+                if hasattr(self.parent_window, 'recorder'):
+                    self.parent_window.recorder.configured_sample_rate = selected_sample_rate
+                log.info(f"SETTINGS: Applied sample rate: {selected_sample_rate}")
+
         # Apply opacity using alpha channel (always works!)
         if hasattr(self, 'opacity_slider'):
             opacity_value = self.opacity_slider.value()
             self.parent_window.update_window_alpha(opacity_value)
-        
+
+        # Apply recording mode
+        if hasattr(self, 'recording_mode_combo'):
+            selected_mode = self.recording_mode_combo.currentData()
+            if selected_mode:
+                self.parent_window.recording_mode = selected_mode
+                log.info(f"SETTINGS: Applied recording mode: {selected_mode}")
+
+        # Apply recording timeout
+        if hasattr(self, 'timeout_combo'):
+            selected_timeout = self.timeout_combo.currentData()
+            if selected_timeout:
+                self.parent_window.recording_timeout = selected_timeout
+                log.info(f"SETTINGS: Applied recording timeout: {selected_timeout}s")
+
+        # Apply silence detection settings
+        if hasattr(self, 'silence_detection_checkbox'):
+            self.parent_window.silence_detection_enabled = self.silence_detection_checkbox.isChecked()
+            log.info(f"SETTINGS: Applied silence detection enabled: {self.parent_window.silence_detection_enabled}")
+
+        if hasattr(self, 'silence_threshold_spin'):
+            self.parent_window.silence_threshold = self.silence_threshold_spin.value()
+            log.info(f"SETTINGS: Applied silence threshold: {self.parent_window.silence_threshold}%")
+
+        if hasattr(self, 'silence_duration_combo'):
+            selected_duration = self.silence_duration_combo.currentData()
+            if selected_duration:
+                self.parent_window.silence_duration = selected_duration
+                log.info(f"SETTINGS: Applied silence duration: {selected_duration}s")
+
+        # Apply Whisper model settings
+        self.save_whisper_settings()
+
         # Apply custom colors and save config
         self.parent_window.apply_custom_colors()
         self.parent_window.save_config()
-        
+
+    def accept_settings(self):
+        """Apply settings and close dialog"""
+        self.apply_settings()
         self.accept()
 

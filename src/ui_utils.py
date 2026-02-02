@@ -7,6 +7,12 @@ import time
 import threading
 from PyQt6.QtCore import QTimer
 
+try:
+    from logger import get_logger
+except ImportError:
+    from .logger import get_logger
+log = get_logger(__name__)
+
 
 class UIWatchdog:
     """Watchdog to detect UI crashes and kill the process"""
@@ -35,8 +41,8 @@ class UIWatchdog:
             
             # If no heartbeat for 5 seconds, UI is likely dead
             if time.time() - self.last_heartbeat > 5:
-                print("🚨 UI WATCHDOG: No heartbeat for 5+ seconds - UI appears dead!")
-                print("🚨 FORCE KILLING PROCESS...")
+                log.error(" UI WATCHDOG: No heartbeat for 5+ seconds - UI appears dead!")
+                log.error(" FORCE KILLING PROCESS...")
                 os._exit(1)
     
     def stop(self):

@@ -5,6 +5,7 @@ Tests for CLI module
 import pytest
 import sys
 import json
+import builtins
 from unittest.mock import patch, MagicMock, mock_open
 from pathlib import Path
 import tempfile
@@ -36,13 +37,18 @@ class TestListAudioDevices:
         
     def test_list_audio_devices_no_sounddevice(self, capsys):
         """Test device listing when sounddevice not available"""
-        with patch.dict('sys.modules', {'sounddevice': None}):
-            with patch('builtins.__import__', side_effect=lambda name, *args, **kwargs: ImportError() if name == 'sounddevice' else __import__(name, *args, **kwargs)):
-                result = list_audio_devices()
-                
-                captured = capsys.readouterr()
-                assert "❌ sounddevice not installed" in captured.out
-                assert result == []
+        original_import = builtins.__import__
+        def mock_import(name, *args, **kwargs):
+            if name == 'sounddevice':
+                raise ImportError("No module named 'sounddevice'")
+            return original_import(name, *args, **kwargs)
+
+        with patch('builtins.__import__', side_effect=mock_import):
+            result = list_audio_devices()
+
+            captured = capsys.readouterr()
+            assert "❌ sounddevice not installed" in captured.out
+            assert result == []
     
     def test_list_audio_devices_no_input_devices(self, capsys):
         """Test when no input devices available"""
@@ -75,22 +81,22 @@ class TestShowDeviceInfo:
     
     def test_show_device_info_with_config(self, mock_sounddevice, temp_config_dir, capsys):
         """Test device info with existing config"""
-        dictator_dir = temp_config_dir / "dictator"
+        dictator_dir = temp_config_dir / ".config" / "dictator"
         dictator_dir.mkdir(parents=True, exist_ok=True)
         config_file = dictator_dir / "config.json"
-        
+
         config_data = {
             'audio_device_index': 1,
             'whisper_model': 'base',
             'hotkey': 'ctrl+space'
         }
-        
+
         with open(config_file, 'w') as f:
             json.dump(config_data, f)
-        
+
         with patch('pathlib.Path.home', return_value=temp_config_dir):
             show_device_info()
-            
+
             captured = capsys.readouterr()
             assert "📁 DICTATOR Configuration:" in captured.out
             assert "Configured Device: 1" in captured.out
@@ -98,9 +104,15 @@ class TestShowDeviceInfo:
     
     def test_show_device_info_no_sounddevice(self, capsys):
         """Test device info when sounddevice not available"""
-        with patch('cli.importlib.import_module', side_effect=ImportError):
+        original_import = builtins.__import__
+        def mock_import(name, *args, **kwargs):
+            if name == 'sounddevice':
+                raise ImportError("No module named 'sounddevice'")
+            return original_import(name, *args, **kwargs)
+
+        with patch('builtins.__import__', side_effect=mock_import):
             show_device_info()
-            
+
             captured = capsys.readouterr()
             assert "❌ sounddevice not installed" in captured.out
 
@@ -125,18 +137,19 @@ class TestShowVersionInfo:
     
     def test_version_info_checks_dependencies(self, capsys):
         """Test that version info checks for dependencies"""
-        with patch('cli.__import__') as mock_import:
+        original_import = builtins.__import__
+        def mock_import(name, *args, **kwargs):
             # Make some dependencies available, others not
-            def import_side_effect(name):
-                if name in ['PyQt6', 'numpy']:
-                    return MagicMock()
-                else:
-                    raise ImportError()
-            
-            mock_import.side_effect = import_side_effect
-            
+            if name in ['PyQt6', 'numpy']:
+                return MagicMock()
+            elif name in ['sounddevice', 'speech_recognition', 'faster_whisper', 'pynput']:
+                raise ImportError(f"No module named '{name}'")
+            else:
+                return original_import(name, *args, **kwargs)
+
+        with patch('builtins.__import__', side_effect=mock_import):
             show_version_info()
-            
+
             captured = capsys.readouterr()
             assert "✅ PyQt6" in captured.out
             assert "✅ numpy" in captured.out
@@ -148,17 +161,17 @@ class TestSetAudioDevice:
     
     def test_set_audio_device_success(self, mock_sounddevice, temp_config_dir, capsys):
         """Test successful device setting"""
-        with patch('pathlib.Path.home', return_value=temp_config_dir.parent):
+        with patch('pathlib.Path.home', return_value=temp_config_dir):
             result = set_audio_device(1)
-            
+
             assert result == True
             captured = capsys.readouterr()
             assert "✅ Audio device set to: [1] USB Headset" in captured.out
-            
+
             # Check config was saved
-            config_file = temp_config_dir / "dictator" / "config.json"
+            config_file = temp_config_dir / ".config" / "dictator" / "config.json"
             assert config_file.exists()
-            
+
             with open(config_file) as f:
                 config = json.load(f)
                 assert config['audio_device_index'] == 1
@@ -190,24 +203,24 @@ class TestSetAudioDevice:
     
     def test_set_audio_device_preserves_existing_config(self, mock_sounddevice, temp_config_dir):
         """Test that device setting preserves other config values"""
-        config_file = temp_config_dir / "dictator" / "config.json"
+        config_file = temp_config_dir / ".config" / "dictator" / "config.json"
         config_file.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Create existing config
         existing_config = {
             'whisper_model': 'base',
             'hotkey': 'ctrl+alt+space',
             'history': ['test entry']
         }
-        
+
         with open(config_file, 'w') as f:
             json.dump(existing_config, f)
-        
-        with patch('pathlib.Path.home', return_value=temp_config_dir.parent):
+
+        with patch('pathlib.Path.home', return_value=temp_config_dir):
             result = set_audio_device(1)
-            
+
             assert result == True
-            
+
             # Check config preserved other values
             with open(config_file) as f:
                 config = json.load(f)
