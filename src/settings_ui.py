@@ -198,7 +198,72 @@ class SettingsDialog(QDialog):
         
         mic_layout.addRow("Microphone:", mic_row)
         audio_layout.addWidget(mic_group)
-        
+
+        # Transcription language
+        lang_group = QGroupBox("Transcription")
+        lang_layout = QFormLayout(lang_group)
+
+        self.language_combo = QComboBox()
+        self.language_combo.setStyleSheet("""
+            QComboBox {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+                min-height: 20px;
+            }
+            QComboBox::drop-down {
+                border: none;
+                background-color: #4CAF50;
+                width: 20px;
+                border-top-right-radius: 4px;
+                border-bottom-right-radius: 4px;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #333;
+                color: white;
+                selection-background-color: #4CAF50;
+                border: 1px solid #4CAF50;
+            }
+        """)
+        languages = [
+            ("Auto-detect", "auto"),
+            ("English", "en"),
+            ("Russian", "ru"),
+            ("German", "de"),
+            ("French", "fr"),
+            ("Spanish", "es"),
+            ("Italian", "it"),
+            ("Portuguese", "pt"),
+            ("Ukrainian", "uk"),
+            ("Polish", "pl"),
+            ("Dutch", "nl"),
+            ("Japanese", "ja"),
+            ("Chinese", "zh"),
+            ("Korean", "ko"),
+            ("Arabic", "ar"),
+        ]
+        for label, code in languages:
+            self.language_combo.addItem(label, code)
+
+        lang_layout.addRow("Language:", self.language_combo)
+
+        self.initial_prompt_input = QLineEdit()
+        self.initial_prompt_input.setPlaceholderText("Leave empty to disable")
+        self.initial_prompt_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #333;
+                color: white;
+                border: 1px solid #4CAF50;
+                border-radius: 4px;
+                padding: 5px 8px;
+            }
+        """)
+        lang_layout.addRow("Initial prompt:", self.initial_prompt_input)
+
+        audio_layout.addWidget(lang_group)
+
         tabs.addTab(audio_tab, "Audio")
         
         # Appearance tab
@@ -514,6 +579,16 @@ class SettingsDialog(QDialog):
             self.opacity_label.setText(f"Opacity: {current_opacity}%")
             print(f"🔥 SETTINGS: Loaded opacity slider value: {current_opacity}%")
         
+        # Load current transcription language and prompt
+        if hasattr(self.parent_window, 'whisper_language') and hasattr(self, 'language_combo'):
+            current_lang = self.parent_window.whisper_language
+            for i in range(self.language_combo.count()):
+                if self.language_combo.itemData(i) == current_lang:
+                    self.language_combo.setCurrentIndex(i)
+                    break
+        if hasattr(self.parent_window, 'whisper_initial_prompt') and hasattr(self, 'initial_prompt_input'):
+            self.initial_prompt_input.setText(self.parent_window.whisper_initial_prompt)
+
         # Load current microphone selection
         if hasattr(self.parent_window, 'recorder') and hasattr(self.parent_window.recorder, 'current_microphone_index'):
             current_mic_index = self.parent_window.recorder.current_microphone_index
@@ -1266,6 +1341,18 @@ class SettingsDialog(QDialog):
         if hasattr(self.parent_window, 'auto_hide_checkbox'):
             self.parent_window.auto_hide_checkbox.setChecked(self.auto_hide_checkbox.isChecked())
         
+        # Apply transcription language
+        if hasattr(self, 'language_combo') and self.language_combo.currentIndex() >= 0:
+            lang_code = self.language_combo.itemData(self.language_combo.currentIndex())
+            self.parent_window.whisper_language = lang_code
+            self.parent_window.recorder.whisper_language = lang_code
+            print(f"🔥 SETTINGS: Applied Whisper language: {lang_code}")
+        if hasattr(self, 'initial_prompt_input'):
+            prompt = self.initial_prompt_input.text()
+            self.parent_window.whisper_initial_prompt = prompt
+            self.parent_window.recorder.whisper_initial_prompt = prompt
+            print(f"🔥 SETTINGS: Applied Whisper initial prompt: {prompt[:50]}")
+
         # Apply microphone selection
         selected_index = self.microphone_combo.currentIndex()
         if selected_index >= 0 and hasattr(self.parent_window, 'recorder'):

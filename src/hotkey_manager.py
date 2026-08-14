@@ -12,6 +12,7 @@ class HotkeyManager:
         self.pressed_keys = set()
         self.hotkey_active = False
         self.callback = None
+        self.release_callback = None
         self.last_callback_success = True
         
         # Set default or provided hotkey combination
@@ -27,7 +28,7 @@ class HotkeyManager:
         # Restart listener with new hotkey
         if self.is_running:
             self.stop()
-            self.start(self.callback)
+            self.start(self.callback, self.release_callback)
     
     def get_hotkey_string(self):
         """Get current hotkey as display string"""
@@ -69,11 +70,12 @@ class HotkeyManager:
         except ImportError:
             return set()
     
-    def start(self, callback):
+    def start(self, callback, release_callback=None):
         if self.is_running:
             return
-        
+
         self.callback = callback
+        self.release_callback = release_callback
         self.is_running = True
         
         try:
@@ -159,14 +161,15 @@ class HotkeyManager:
     def _on_key_release(self, key):
         try:
             self.pressed_keys.discard(key)
-            
+
             # Deactivate when any required key is released
             if self.hotkey_active and key in self.required_keys:
                 self.hotkey_active = False
                 print(f"🔥 HOTKEY: Deactivated")
-                if self.callback:
+                target = self.release_callback if self.release_callback else self.callback
+                if target:
                     try:
-                        self.callback()
+                        target()
                         self.last_callback_success = True
                     except Exception as e:
                         print(f"Callback failed on release: {e}")

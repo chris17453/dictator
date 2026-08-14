@@ -46,6 +46,9 @@ class DictatorWindow(QMainWindow):
     def __init__(self, no_tray=False):
         super().__init__()
         self.recorder = PureRecorder()
+        # Transcription language and prompt (passed to Whisper)
+        self.whisper_language = ""  # Loaded from config; empty string = auto-detect
+        self.whisper_initial_prompt = "Fix spelling and add punctuation. Use correct capitalization and grammar."
         # Load hotkey from config or use default
         self.current_hotkey = ["Ctrl", "Space"]  # Default
         self.hotkey_manager = HotkeyManager(self.current_hotkey)
@@ -112,8 +115,8 @@ class DictatorWindow(QMainWindow):
         # Connect status update callback
         self.recorder.update_status_callback = self.update_status_label
         
-        # Start hotkey manager
-        self.hotkey_manager.start(self.toggle_recording)
+        # Start hotkey manager with push-to-talk: press=start, release=stop
+        self.hotkey_manager.start(self.hotkey_press, self.hotkey_release)
         
         # System tray setup
         if not no_tray:
@@ -165,6 +168,14 @@ class DictatorWindow(QMainWindow):
             elif request.action == "toggle_recording":
                 print("🔥 UI_UPDATE: Processing toggle_recording from hotkey")
                 self._safe_toggle_recording()
+            elif request.action == "start_recording":
+                print("🔥 UI_UPDATE: Processing start_recording from hotkey press")
+                if not self.recorder.is_recording:
+                    self.start_recording()
+            elif request.action == "stop_recording":
+                print("🔥 UI_UPDATE: Processing stop_recording from hotkey release")
+                if self.recorder.is_recording:
+                    self.stop_recording()
             elif request.action == "copy_to_clipboard":
                 text = request.kwargs.get('text', '')
                 print("🔥 UI_UPDATE: Processing copy_to_clipboard")
@@ -852,6 +863,16 @@ class DictatorWindow(QMainWindow):
         print("🔥 HOTKEY: toggle_recording called from hotkey")
         # Queue the recording toggle to run on main thread (thread-safe)
         self.request_ui_update("toggle_recording")
+
+    def hotkey_press(self):
+        """Called when hotkey is pressed down - start recording (push-to-talk)"""
+        print("🔥 HOTKEY: key pressed - requesting start_recording")
+        self.request_ui_update("start_recording")
+
+    def hotkey_release(self):
+        """Called when hotkey is released - stop recording (push-to-talk)"""
+        print("🔥 HOTKEY: key released - requesting stop_recording")
+        self.request_ui_update("stop_recording")
     
     def toggle_manual_recording(self):
         print("🔥 BUTTON_CLICK: Manual recording button clicked")
@@ -995,14 +1016,14 @@ class DictatorWindow(QMainWindow):
         if text and text.strip():
             print(f"🔥 Queuing add_history_item for: '{text.strip()}'")
             
-            # Check if our window is active - if not, type the text as keystrokes
+            # Always copy to clipboard so text is ready to paste
+            print("🔥 CLIPBOARD: Copying transcription to clipboard...")
+            self.request_ui_update("copy_to_clipboard", text=text.strip())
+
+            # Also type as keystrokes if window is not active
             if not self.isActiveWindow():
-                print("🔥 KEYBOARD: Window not active, typing text as keystrokes...")
+                print("🔥 KEYBOARD: Window not active, also typing text as keystrokes...")
                 self.request_ui_update("type_text", text=text.strip())
-            else:
-                print("🔥 CLIPBOARD: Window is active, using clipboard...")
-                # Queue clipboard copy to ensure it runs on main thread
-                self.request_ui_update("copy_to_clipboard", text=text.strip())
             
             self.request_ui_update("add_history_item", text=text.strip())
             self.request_ui_update("update_status", 
@@ -1426,6 +1447,14 @@ class DictatorWindow(QMainWindow):
                     self.current_hotkey = saved_hotkey
                     self.hotkey_manager.set_hotkey(saved_hotkey)
                     print(f"🔥 CONFIG: Loaded hotkey: {self.hotkey_manager.get_hotkey_string()}")
+
+                    # Load transcription language and prompt
+                    self.whisper_language = config.get('whisper_language', '')
+                    self.recorder.whisper_language = self.whisper_language
+                    print(f"🔥 CONFIG: Loaded Whisper language: {self.whisper_language}")
+                    self.whisper_initial_prompt = config.get('whisper_initial_prompt', self.whisper_initial_prompt)
+                    self.recorder.whisper_initial_prompt = self.whisper_initial_prompt
+                    print(f"🔥 CONFIG: Loaded Whisper initial prompt: {self.whisper_initial_prompt[:50]}")
                     
                     # Load session management
                     self.current_session = config.get('current_session', 'Default')
@@ -1498,6 +1527,8 @@ class DictatorWindow(QMainWindow):
                 'always_on_top': self.always_on_top,
                 'window_opacity': self.current_opacity_percent,
                 'hotkey_combination': self.current_hotkey,
+                'whisper_language': self.whisper_language,
+                'whisper_initial_prompt': self.whisper_initial_prompt,
                 'current_session': self.current_session,
                 'current_session_history': self.current_session_history,
                 'saved_sessions': self.saved_sessions,

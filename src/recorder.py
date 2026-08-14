@@ -42,6 +42,8 @@ class PureRecorder:
         self.whisper_model = None
         self.whisper_model_name = "tiny"
         self.use_openai_whisper = False
+        self.whisper_language = ""  # Configurable via settings; empty = auto-detect
+        self.whisper_initial_prompt = "Fix spelling and add punctuation. Use correct capitalization and grammar."
         
         # Subprocess tracking for cleanup
         self.active_subprocess = None
@@ -338,10 +340,10 @@ class PureRecorder:
                 
                 # Start recording subprocess
                 process = subprocess.Popen([
-                    'python', recorder_script,
+                    sys.executable, recorder_script,
                     str(device_index) if device_index is not None else "None",
                     str(working_rate)
-                ], stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+                ], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                    cwd=os.path.dirname(__file__))
                 
                 # Store subprocess reference for cleanup
@@ -490,7 +492,13 @@ class PureRecorder:
                     print("🔥 WHISPER: Starting transcription with faster-whisper...")
                     print(f"🔥 WHISPER: Audio length: {len(audio_float)} samples")
                     
-                    segments, info = self.whisper_model.transcribe(audio_float)
+                    lang = self.whisper_language if self.whisper_language and self.whisper_language != "auto" else None
+                    prompt = self.whisper_initial_prompt if self.whisper_initial_prompt.strip() else None
+                    segments, info = self.whisper_model.transcribe(
+                        audio_float,
+                        language=lang,
+                        initial_prompt=prompt,
+                    )
                     print("🔥 WHISPER: Transcription completed, processing segments...")
                     
                     text = "".join([segment.text for segment in segments]).strip()
