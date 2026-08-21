@@ -157,6 +157,25 @@ def setup(argv: list[str]) -> int:
     return _explain()
 
 
+def _evdev_install_hints() -> list[str]:
+    """Package-manager commands for this distribution, best first.
+
+    Building the C extension needs headers and a compiler; the distribution
+    package needs neither, so it is the better answer nearly everywhere.
+    """
+    import shutil
+
+    if shutil.which("dnf"):
+        return ["sudo dnf install python3-evdev"]
+    if shutil.which("apt-get"):
+        return ["sudo apt install python3-evdev"]
+    if shutil.which("pacman"):
+        return ["sudo pacman -S python-evdev"]
+    if shutil.which("zypper"):
+        return ["sudo zypper install python3-evdev"]
+    return ["pip install evdev  (needs a compiler and Python headers)"]
+
+
 UDEV_RULE_PATH = "/etc/udev/rules.d/70-dictator.rules"
 
 def _udev_rule(user: str, setfacl: str) -> str:
@@ -201,6 +220,23 @@ def _grant_devices() -> int:
     print("  X11 client has by default, and what ydotool and similar tools")
     print("  require. In exchange, nothing ever prompts and hold-to-talk works.")
     print()
+
+    try:
+        import evdev  # noqa: F401
+    except ImportError:
+        print(f"{fmt.BAD} the evdev package is not installed, so these backends "
+              f"cannot be used")
+        print()
+        print("  evdev is a C extension, which is why it is optional. Your")
+        print("  distribution almost certainly packages it already, which avoids")
+        print("  needing a compiler at all:")
+        print()
+        for command in _evdev_install_hints():
+            print(f"    {fmt.bold(command)}")
+        print()
+        print(fmt.dim("  or build it: pip install 'the-dictator[no-portal]'"))
+        print(fmt.dim("  granting device access without it would achieve nothing"))
+        return 1
 
     if shutil.which("sudo") is None:
         print(f"{fmt.BAD} sudo is not available; run these as root yourself:")

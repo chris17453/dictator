@@ -70,3 +70,7 @@ ai-temp/*
 !ai-temp/TASKS.md
 !ai-temp/GAPS.md
 !ai-temp/SESSION_SUMMARY.md.archive/
+
+dist/
+build/
+*.egg-info/

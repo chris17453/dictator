@@ -13,19 +13,24 @@ authors = [
 ]
 requires-python = ">=3.8"
 dependencies = [
-    "pyqt6>=6.0.0",
-    "speechrecognition>=3.8.0",
-    "pynput>=1.6.0",
-    "requests>=2.20.0",
-    "numpy>=1.18.0",
-    "pyaudio>=0.2.11",
-    "faster-whisper>=0.10.0",
-    "soundfile>=0.10.0",
-    "librosa>=0.8.0",
-    "sounddevice>=0.4.0",
-    "platformdirs>=2.0.0",
+    # service and control plane
     "dbus-next>=0.2.3",
+    "platformdirs>=2.0.0",
+    "tomli>=2.0.0; python_version<'3.11'",
     "tomli-w>=1.0.0",
+    # audio capture and rate conversion
+    "sounddevice>=0.4.0",
+    "numpy>=1.18.0",
+    # scipy gives a polyphase resampler. There is a linear fallback, but
+    # downsampling 48 kHz to 16 kHz without an anti-aliasing filter folds
+    # noise into the speech band and costs recognition accuracy.
+    "scipy>=1.7.0",
+    # speech recognition
+    "faster-whisper>=1.0.0",
+    "huggingface-hub>=0.20.0",
+    # X11 backends. Pure Python, so it installs anywhere; the probe reports
+    # cleanly on a session where X11 is not in use.
+    "python-xlib>=0.33",
 ]
 
 keywords = ["dictation", "speech-to-text", "whisper", "wayland", "x11", "voice", "daemon"]
@@ -48,7 +53,18 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+# The prompt-free backends. evdev is a C extension, so it needs a compiler and
+# Python headers — a hard dependency would fail the install on any machine
+# without them. Every backend probes itself at startup, so its absence
+# degrades to the desktop portal rather than breaking anything.
+no-portal = [
+    "evdev>=1.6.0",
+]
 cuda = [
+    "nvidia-cudnn-cu12>=9.0.0",
+]
+all = [
+    "evdev>=1.6.0",
     "nvidia-cudnn-cu12>=9.0.0",
 ]
 test = [

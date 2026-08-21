@@ -17,10 +17,24 @@ Super+Escape       discard what you are saying
 ## Install
 
 ```bash
-make setup                    # install the service
-dictator setup --no-portal    # grant direct device access (needs sudo)
+pip install the-dictator                 # or: make setup, from a checkout
+dictator setup --install                 # systemd unit + desktop entry
+dictator setup --no-portal               # optional: no prompts, ever
 dictator doctor
 ```
+
+The prompt-free backends need `evdev`, which is a C extension and therefore an
+optional extra rather than a hard dependency — a compiler is not something an
+install should require. Your distribution almost certainly packages it:
+
+```bash
+sudo dnf install python3-evdev     # or apt / pacman / zypper
+# or, to build it:  pip install 'the-dictator[no-portal]'
+```
+
+Without it, everything still works through the desktop portal; `dictator setup
+--no-portal` says so rather than silently granting device access that nothing
+would use.
 
 `--no-portal` is the recommended path on a machine you control. It grants the
 daemon direct access to the kernel's input devices, so **nothing ever prompts**

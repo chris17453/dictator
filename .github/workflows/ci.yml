@@ -59,16 +59,49 @@ jobs:
           '
 
   package:
-    name: build
+    name: build and install
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libportaudio2 dbus-x11
+
       - name: Build the wheel and sdist
         run: uv build
+
       - name: Check the metadata
+        run: uv tool run twine check dist/*
+
+      - name: The wheel must not carry anything it should not
         run: |
-          uv tool run twine check dist/*
+          python - <<'PY'
+          import glob, zipfile, sys
+          names = zipfile.ZipFile(glob.glob('dist/*.whl')[0]).namelist()
+          stray = [n for n in names if any(x in n for x in
+                   ('whisper_models', 'tests_v2', '.archive', '__pycache__', '.venv'))]
+          if stray:
+              print('stray files in the wheel:', stray[:10]); sys.exit(1)
+          assert any(n.startswith('dictatord/') for n in names)
+          assert any(n.startswith('dictator_cli/') for n in names)
+          print(f'{len(names)} files, nothing stray')
+          PY
+
+      - name: Install into a clean environment and run it
+        # No compiler dependency: evdev is an optional extra precisely so the
+        # base install works on a machine without Python headers.
+        run: |
+          uv venv /tmp/clean
+          uv pip install --python /tmp/clean/bin/python dist/*.whl
+          /tmp/clean/bin/dictator --version
+          /tmp/clean/bin/dictator config get shortcuts.dictate
+          /tmp/clean/bin/dictator config list > /dev/null
+          dbus-run-session -- /tmp/clean/bin/dictator doctor || true
+          test -x /tmp/clean/bin/dictatord
+
       - uses: actions/upload-artifact@v4
         with:
           name: dist
