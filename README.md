@@ -17,18 +17,30 @@ Super+Escape       discard what you are saying
 ## Install
 
 ```bash
-make setup
-```
-
-That installs the package, writes a systemd user unit and a desktop entry,
-and starts the service. Your desktop will then ask twice: once to approve the
-shortcut, once to allow typing into other applications. **Approve both.**
-
-Then confirm:
-
-```bash
+make setup                    # install the service
+dictator setup --no-portal    # grant direct device access (needs sudo)
 dictator doctor
 ```
+
+`--no-portal` is the recommended path on a machine you control. It grants the
+daemon direct access to the kernel's input devices, so **nothing ever prompts**
+and hold-to-talk works. Without it the daemon falls back to the desktop portal,
+which asks for permission twice — once for the shortcut, once for typing.
+
+What `--no-portal` grants, stated plainly:
+
+| Device | Capability |
+|---|---|
+| `/dev/input/event*` | reading raw key events — a keylogging capability |
+| `/dev/uinput` | writing synthetic key events — an input-injection capability |
+
+Any process running as you gains both. That is the same power any X11 client
+holds by default, and exactly what `ydotool` and similar tools require. Revoke
+with `dictator setup --revoke-device-access`.
+
+If you would rather not grant it, everything still works through the portal —
+the daemon asks once, remembers your answer, and never asks again. Use
+`dictator grant` to re-open a permission you declined.
 
 ### Why the systemd unit is not optional on GNOME
 
@@ -159,11 +171,16 @@ already in hand — which is why the first word is not clipped.
 
 | Environment | Shortcuts | Injection | App detection | Tier |
 |---|---|---|---|---|
+| Any desktop, device access granted | evdev | uinput | chord-bound | 1 |
 | GNOME · Wayland | portal | portal | chord-bound | 1 |
 | Any WM · X11 | XGrabKey | XTEST | automatic | 1 |
 | KDE · Wayland | portal | portal | chord-bound | 2 |
 | Sway / Hyprland | portal | wtype | chord-bound | 2 |
 | Headless / CI | none | clipboard | n/a | 3 |
+
+The evdev/uinput pair is preferred whenever it is available, because it never
+prompts and still reports key release, so hold-to-talk works. The portal's
+guarantee is consent, not capability — it is the fallback, not the ideal.
 
 The display server is detected once, in strict order, keying on
 `XDG_SESSION_TYPE` first — because under XWayland `DISPLAY` is set on a Wayland

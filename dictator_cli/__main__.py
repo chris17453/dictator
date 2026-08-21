@@ -53,6 +53,7 @@ COMMANDS = {
     "search": history_cmd.search,
     # service control
     "setup": service_cmd.setup,
+    "grant": service_cmd.grant,
     "daemon": service_cmd.daemon,
     "restart": service_cmd.restart,
     "quit": service_cmd.quit_daemon,
@@ -89,6 +90,7 @@ USAGE = """dictator — speech to text, without a window
 
   service
     setup               install the service and shortcuts
+    grant               ask again for a declined permission
     daemon              run the daemon in the foreground
     restart / quit      control a running daemon
     reload              re-read configuration without restarting

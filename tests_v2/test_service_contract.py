@@ -50,6 +50,10 @@ async def daemon(monkeypatch):
             "streaming.enabled": False,
             "model.keep_resident": False,
             "lexicon.enabled": True,
+            # Pin the null backend. Without this the suite would pick up
+            # whatever the developer's machine happens to allow — evdev works
+            # headlessly, so results would differ by device permissions.
+            "shortcuts.backend": "none",
         },
         use_site=False, use_user=False,
     )
@@ -61,6 +65,7 @@ async def daemon(monkeypatch):
 
 
 async def test_headless_selects_null_backends(daemon):
+    """With no display server and no backend forced on, nothing is available."""
     assert daemon.platform.session.is_headless
     assert daemon.platform.shortcuts.name == "none"
     assert daemon.platform.injection.name == "none"

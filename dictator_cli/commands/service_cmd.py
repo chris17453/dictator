@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import glob
 import os
 import shutil
 import subprocess
@@ -139,13 +140,138 @@ def setup(argv: list[str]) -> int:
     parser.add_argument("--uninstall", action="store_true",
                         help="Stop the service and remove what --install wrote.")
     parser.add_argument("--force", action="store_true", help="Overwrite existing files.")
+    parser.add_argument("--no-portal", action="store_true",
+                        help="Grant direct device access so nothing ever prompts. Needs sudo.")
+    parser.add_argument("--revoke-device-access", action="store_true",
+                        help="Undo --no-portal.")
     args = parser.parse_args(argv)
 
     if args.uninstall:
         return _uninstall()
+    if args.revoke_device_access:
+        return _revoke_devices()
+    if args.no_portal:
+        return _grant_devices()
     if args.install:
         return _install(args.force)
     return _explain()
+
+
+UDEV_RULE_PATH = "/etc/udev/rules.d/70-dictator.rules"
+
+def _udev_rule(user: str, setfacl: str) -> str:
+    """The udev rule, naming the user who ran setup.
+
+    Three approaches were considered and two rejected:
+
+    * ``TAG+="uaccess"`` grants only to a session attached to a seat. A remote
+      session has no seat, so it grants nothing.
+    * ``GROUP="input"`` alone works, but group membership only reaches
+      processes started after a fresh login — so a keyboard plugged in today
+      would not work until the user logged out and back in.
+
+    An explicit ACL applies immediately and to devices that appear later,
+    which is what a daemon needs. It names one user, which is the honest
+    trade for a rule that lives in /etc.
+    """
+    return f"""# dictator - prompt-free input access for {user}.
+#
+# Reading /dev/input/event* is a keylogging capability; writing /dev/uinput is
+# an input-injection one. Remove this file to revoke both:
+#   dictator setup --revoke-device-access
+KERNEL=="uinput", SUBSYSTEM=="misc", GROUP="input", MODE="0660", \
+  OPTIONS+="static_node=uinput", RUN+="{setfacl} -m u:{user}:rw /dev/uinput"
+KERNEL=="event*", SUBSYSTEM=="input", GROUP="input", MODE="0660", \
+  RUN+="{setfacl} -m u:{user}:rw $env{{DEVNAME}}"
+"""
+
+
+def _grant_devices() -> int:
+    """Give the daemon direct input access, so no portal prompt is ever needed."""
+    import getpass
+
+    user = getpass.getuser()
+
+    print(fmt.bold("What this grants, and what it costs"))
+    print()
+    print("  Reading /dev/input/event*  a keylogging capability")
+    print("  Writing /dev/uinput        an input-injection capability")
+    print()
+    print("  Any process running as you gains both. That is the same power an")
+    print("  X11 client has by default, and what ydotool and similar tools")
+    print("  require. In exchange, nothing ever prompts and hold-to-talk works.")
+    print()
+
+    if shutil.which("sudo") is None:
+        print(f"{fmt.BAD} sudo is not available; run these as root yourself:")
+        print(fmt.dim(f"  printf '%s' '{UDEV_RULE}' > {UDEV_RULE_PATH}"))
+        print(fmt.dim(f"  udevadm control --reload-rules && udevadm trigger"))
+        print(fmt.dim(f"  usermod -aG input {user}"))
+        return 1
+
+    setfacl = shutil.which("setfacl") or "/usr/bin/setfacl"
+    if not os.path.exists(setfacl):
+        print(f"{fmt.BAD} setfacl is missing; install acl: sudo dnf install acl")
+        return 1
+
+    steps = [
+        (["sudo", "tee", UDEV_RULE_PATH], "install the udev rule",
+         _udev_rule(user, setfacl)),
+        (["sudo", "udevadm", "control", "--reload-rules"], "reload udev rules", None),
+        (["sudo", "udevadm", "trigger", "--subsystem-match=input",
+          "--subsystem-match=misc"], "apply them to existing devices", None),
+        (["sudo", "usermod", "-aG", "input", user], f"add {user} to the input group", None),
+    ]
+    for command, what, stdin in steps:
+        result = subprocess.run(command, input=stdin, capture_output=True, text=True)
+        if result.returncode != 0:
+            print(f"{fmt.BAD} could not {what}: {result.stderr.strip()}")
+            return 1
+        print(f"{fmt.OK} {what}")
+
+    # The rule covers devices that appear from now on. Existing ones were
+    # created before it existed, so grant those directly.
+    granted = 0
+    for path in ["/dev/uinput", *glob.glob("/dev/input/event*")]:
+        if subprocess.run(["sudo", "setfacl", "-m", f"u:{user}:rw", path],
+                          capture_output=True).returncode == 0:
+            granted += 1
+    if granted:
+        print(f"{fmt.OK} granted this session access to {granted} device(s)")
+
+    ok_uinput = os.access("/dev/uinput", os.W_OK)
+    readable = sum(1 for p in glob.glob("/dev/input/event*") if os.access(p, os.R_OK))
+    print()
+    print(fmt.kv([
+        ("/dev/uinput", fmt.OK + " writable" if ok_uinput else fmt.BAD + " not writable"),
+        ("input devices", f"{readable} readable"),
+    ]))
+    if not ok_uinput or not readable:
+        print()
+        print(fmt.yellow(f"{fmt.WARN} log out and back in for group membership to take effect"))
+        return 1
+
+    print()
+    print(f"{fmt.OK} the daemon will now use the evdev and uinput backends")
+    print(fmt.dim("  restart it to pick them up: dictator restart"))
+    return 0
+
+
+def _revoke_devices() -> int:
+    import getpass
+
+    user = getpass.getuser()
+    if shutil.which("sudo") is None:
+        print(f"{fmt.BAD} sudo is not available")
+        return 1
+    subprocess.run(["sudo", "rm", "-f", UDEV_RULE_PATH], capture_output=True)
+    subprocess.run(["sudo", "gpasswd", "-d", user, "input"], capture_output=True)
+    subprocess.run(["sudo", "udevadm", "control", "--reload-rules"], capture_output=True)
+    subprocess.run(["sudo", "udevadm", "trigger", "--subsystem-match=input",
+                    "--subsystem-match=misc"], capture_output=True)
+    print(f"{fmt.OK} device access revoked; the daemon will fall back to the portal")
+    print(fmt.dim("  log out and back in to drop the group from running sessions"))
+    return 0
 
 
 def _explain() -> int:
@@ -238,6 +364,33 @@ def _uninstall() -> int:
     if not removed:
         print("nothing was installed")
     print(fmt.dim("  configuration and transcripts were left alone"))
+    return 0
+
+
+def grant(argv: list[str]) -> int:
+    """Re-ask for a permission the user previously declined or ignored."""
+    parser = argparse.ArgumentParser(
+        prog="dictator grant",
+        description="Ask again for a permission that was declined or left unanswered.",
+    )
+    parser.add_argument("permission", nargs="?", default="all",
+                        choices=["all", "shortcuts", "injection"])
+    args = parser.parse_args(argv)
+
+    from dictatord.consent import ConsentLedger
+
+    ledger = ConsentLedger(cfg.state_dir() / "consent.json").load()
+    before = ledger.summary()
+    ledger.reset(None if args.permission == "all" else args.permission)
+
+    print(f"{fmt.OK} will ask again for: "
+          f"{'both permissions' if args.permission == 'all' else args.permission}")
+    for key, decision in before.items():
+        if decision != "unasked":
+            print(fmt.dim(f"  {key} was {decision}"))
+    print()
+    print(f"  Restart to trigger the prompt: {fmt.bold('dictator restart')}")
+    print(fmt.dim("  Or avoid prompts entirely: dictator setup --no-portal"))
     return 0
 
 

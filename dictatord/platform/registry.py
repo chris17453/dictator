@@ -63,6 +63,14 @@ async def _shortcut_candidates(session: Session, preference: str):
     if preference == "none":
         return [NullShortcuts]
 
+    # evdev first when it is usable: it never prompts, and it reports key
+    # release, so hold-to-talk works. The portal is preferred only when evdev
+    # has no permission, because the portal's guarantee is consent, not
+    # capability.
+    if preference in ("auto", "evdev"):
+        from .evdev_shortcuts import EvdevShortcuts
+
+        candidates.append(EvdevShortcuts)
     if preference in ("auto", "portal") and session.type is not SessionType.HEADLESS:
         from .portal_shortcuts import PortalShortcuts
 
@@ -86,6 +94,12 @@ async def _injection_candidates(session: Session):
     from .null_backends import NullInjection
 
     candidates: list[type[InjectionBackend]] = []
+    if session.type is not SessionType.HEADLESS:
+        # Same reasoning as shortcuts: no prompt beats a prompt when the
+        # permission is already granted at the device level.
+        from .uinput_injection import UinputInjection
+
+        candidates.append(UinputInjection)
     if session.is_wayland:
         from .portal_injection import PortalInjection
 
@@ -115,6 +129,14 @@ async def probe_all(session: Session | None = None) -> list[Capability]:
         injection_classes.append(PortalInjection)
     except Exception as exc:  # pragma: no cover - import guard
         log.debug("portal backends unavailable for probing", error=str(exc))
+    try:
+        from .evdev_shortcuts import EvdevShortcuts
+        from .uinput_injection import UinputInjection
+
+        shortcut_classes.append(EvdevShortcuts)
+        injection_classes.append(UinputInjection)
+    except Exception as exc:  # pragma: no cover - import guard
+        log.debug("evdev backends unavailable for probing", error=str(exc))
     try:
         from .x11_shortcuts import X11Shortcuts
         from .x11_injection import X11Injection

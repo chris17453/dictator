@@ -168,7 +168,7 @@ SCHEMA: tuple[Field, ...] = (
         "auto",
         str,
         "Shortcut backend. 'auto' probes the session.",
-        choices=("auto", "portal", "x11", "evdev", "none"),
+        choices=("auto", "evdev", "portal", "x11", "none"),
     ),
     # ---- audio ----------------------------------------------------------
     Field("audio.device", "", str, "Input device by stable name. Empty means the system default."),

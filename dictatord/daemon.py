@@ -13,6 +13,7 @@ from pathlib import Path
 
 from . import config as config_module
 from .asr.engine import Engine
+from .consent import ConsentLedger, Decision
 from .asr.stream import Partial, StreamingDecoder
 from .asr import models as model_catalog
 from .audio import devices as device_catalog
@@ -90,6 +91,9 @@ class Daemon:
             config_module.data_dir() / "lexicon.json",
             max_prompt_terms=cfg["lexicon.max_prompt_terms"],
         )
+        self.consent = ConsentLedger(
+            config_module.state_dir() / "consent.json"
+        ).load()
 
         self.platform: registry.PlatformSelection | None = None
         self.deliverer: Deliverer | None = None
@@ -174,30 +178,71 @@ class Daemon:
         if self.platform is None:
             return
 
-        if self.platform.shortcuts is not None:
-            try:
-                await self.platform.shortcuts.start(self._on_shortcut)
-                self.shortcuts_ready = await self._bind_shortcuts()
-            except Fault as fault:
-                self._report(fault)
-            if not self.shortcuts_ready:
-                log.warning(
-                    "no global shortcut is bound; dictation still works via "
-                    "'dictator toggle'"
-                )
+        await self._acquire("shortcuts", self._start_shortcuts)
+        await self._acquire("injection", self._start_injection)
 
-        if self.platform.injection is not None:
-            try:
-                await self.platform.injection.start()
-                self.injection_ready = True
-            except Fault as fault:
-                # Injection is not required to record and copy; degrade rather
-                # than refuse to run.
-                self._report(fault)
-                log.warning(
-                    "continuing without input injection; transcripts will be "
-                    "copied to the clipboard only"
+    async def _acquire(self, key: str, action) -> None:
+        """Run one consent-requiring step, at most once per answer.
+
+        A backend that needs no consent is simply attempted. One that does is
+        attempted only if the user has not already answered: a decline, or a
+        prompt left unanswered, is remembered. Re-asking on every start turns a
+        restart into a stream of dialogs the user must dismiss, which is worse
+        than the missing feature.
+        """
+        capability = (
+            self.platform.shortcut_capability if key == "shortcuts"
+            else self.platform.injection_capability
+        )
+        needs_consent = bool(capability and capability.requires_consent)
+
+        if needs_consent and not self.consent.should_ask(key):
+            reason = self.consent.why_not_asking(key)
+            if self.consent.get(key).decision is Decision.GRANTED:
+                # Consent persists in the portal itself; re-running is cheap
+                # and silent once granted.
+                pass
+            else:
+                log.info(
+                    "not asking for permission again",
+                    permission=key,
+                    reason=reason,
+                    remedy="dictator grant",
                 )
+                return
+
+        try:
+            ok = await action()
+        except Fault as fault:
+            self._report(fault)
+            if needs_consent:
+                self.consent.record(key, Decision.IGNORED
+                                    if "did not answer" in fault.message
+                                    else Decision.DECLINED, fault.message)
+            return
+        if needs_consent:
+            self.consent.record(
+                key, Decision.GRANTED if ok else Decision.DECLINED
+            )
+
+    async def _start_shortcuts(self) -> bool:
+        if self.platform.shortcuts is None:
+            return False
+        await self.platform.shortcuts.start(self._on_shortcut)
+        self.shortcuts_ready = await self._bind_shortcuts()
+        if not self.shortcuts_ready:
+            log.warning(
+                "no global shortcut is bound; dictation still works via "
+                "'dictator toggle'"
+            )
+        return self.shortcuts_ready
+
+    async def _start_injection(self) -> bool:
+        if self.platform.injection is None:
+            return False
+        await self.platform.injection.start()
+        self.injection_ready = True
+        return True
 
     async def _preload(self) -> None:
         try:
@@ -594,6 +639,8 @@ class Daemon:
             "app_id": app_id(),
             "health": self.metrics.health()[0],
             "shortcuts_ready": self.shortcuts_ready,
+            "consent_shortcuts": self.consent.get("shortcuts").decision.value,
+            "consent_injection": self.consent.get("injection").decision.value,
             "injection_ready": self.injection_ready,
         }
         engine = self.engine.describe()

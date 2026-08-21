@@ -52,20 +52,37 @@ class WlClipboard(Clipboard):
             return False, "wl-copy not found (install wl-clipboard)"
         return True, ""
 
+    #: No clipboard call may take longer than this. A hung helper would
+    #: otherwise stall delivery indefinitely, with the user's words in limbo.
+    TIMEOUT = 5.0
+
     async def set_text(self, text: str) -> None:
+        # wl-copy forks a helper that stays alive owning the selection. That
+        # child inherits whatever pipes we give the parent, so communicate()
+        # would wait for EOF that only arrives when the clipboard is next
+        # replaced — a hang on every delivery. Give it no pipes to inherit
+        # beyond stdin, and wait only for the parent.
         process = await asyncio.create_subprocess_exec(
             "wl-copy",
             "--type",
             "text/plain;charset=utf-8",
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
         )
-        _, stderr = await process.communicate(text.encode("utf-8"))
-        if process.returncode != 0:
-            raise RuntimeError(
-                f"wl-copy failed ({process.returncode}): {stderr.decode(errors='replace').strip()}"
-            )
+        try:
+            process.stdin.write(text.encode("utf-8"))
+            await process.stdin.drain()
+            process.stdin.close()
+        except (BrokenPipeError, ConnectionResetError):  # pragma: no cover
+            pass
+        try:
+            returncode = await asyncio.wait_for(process.wait(), self.TIMEOUT)
+        except asyncio.TimeoutError:
+            process.kill()
+            raise RuntimeError("wl-copy did not finish; the clipboard was not set") from None
+        if returncode != 0:
+            raise RuntimeError(f"wl-copy failed with status {returncode}")
 
     async def get_text(self) -> str | None:
         if shutil.which("wl-paste") is None:
@@ -78,7 +95,12 @@ class WlClipboard(Clipboard):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL,
         )
-        stdout, _ = await process.communicate()
+        try:
+            stdout, _ = await asyncio.wait_for(process.communicate(), self.TIMEOUT)
+        except asyncio.TimeoutError:
+            process.kill()
+            log.debug("wl-paste timed out; treating the clipboard as unreadable")
+            return None
         if process.returncode != 0:
             # An empty clipboard is an error exit for wl-paste, not a failure.
             return None
