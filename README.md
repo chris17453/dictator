@@ -1,333 +1,206 @@
-# DICTATOR 🎤
+# dictator
 
-<div align="center">
-  <img src="desktop/dictator-128.png" alt="DICTATOR Logo" width="128" height="128">
-</div>
+Speech to text, without a window.
 
-**Real-time speech-to-text dictation app with floating Qt interface**
+Press two keys, talk, and the text lands in whatever field has focus — and on
+your clipboard. Tap the chord to toggle; hold it to dictate only while held.
+There is no UI in normal operation and nothing to keep on screen.
 
-[![Version](https://img.shields.io/badge/version-1.0.2-blue.svg)](https://github.com/chris17453/dictator)
-[![Python](https://img.shields.io/badge/python-≥3.8-green.svg)](https://python.org)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+Runs as a headless user service on **both X11 and Wayland**.
 
-DICTATOR is a modern, feature-rich speech-to-text dictation application built with PyQt6 and powered by OpenAI's Whisper for accurate transcription. It provides a floating, always-on-top interface for seamless dictation anywhere on your desktop.
+```
+Super+D            tap to start, tap to stop
+Super+D (held)     dictate while held, delivers on release
+Super+Escape       discard what you are saying
+```
 
-## ✨ Features
-
-- **🎙️ Real-time Speech Recognition**: Powered by faster-whisper for high-accuracy transcription
-- **🖼️ Floating Interface**: Always-on-top, draggable window that stays accessible
-- **⌨️ Global Hotkeys**: System-wide Ctrl+Space hotkey for instant voice recording
-- **📋 Smart Output**: Automatically copies to clipboard or types directly into active applications
-- **🎨 Customizable UI**: Adjustable transparency, colors, fonts, and themes
-- **🔊 Live Audio Monitoring**: Real-time volume level display while recording
-- **📝 Session Management**: Organize transcriptions by named sessions
-- **📚 History Tracking**: Keep track of all your dictations with clickable history
-- **🔧 Device Management**: Easy microphone selection and audio device configuration
-- **🖥️ System Tray**: Minimize to tray with quick access controls
-- **🎯 GNOME Integration**: Proper desktop integration with icons and notifications
-
-## 🚀 Quick Start
-
-### Installation
+## Install
 
 ```bash
-# Install from PyPI (recommended)
-pip install the-dictator
-
-# Or install from source
-git clone https://github.com/chris17453/dictator.git
-cd dictator
-pip install -e .
+make setup
 ```
 
-### First Run
+That installs the package, writes a systemd user unit and a desktop entry,
+and starts the service. Your desktop will then ask twice: once to approve the
+shortcut, once to allow typing into other applications. **Approve both.**
 
-1. **Launch DICTATOR**:
-   ```bash
-   dictator
-   ```
-
-2. **Setup Audio Permissions** (Linux only):
-   ```bash
-   # Run the setup script to enable global hotkeys
-   dictator --setup-permissions
-   # Or manually add yourself to the input group
-   sudo usermod -a -G input $USER
-   # Then log out and back in
-   ```
-
-3. **Configure Audio Device**:
-   ```bash
-   # List available microphones
-   dictator --list-devices
-   
-   # Set your preferred microphone
-   dictator --set-device 2  # Use the ID from --list-devices
-   ```
-
-## 📖 Usage
-
-### Basic Usage
-
-1. **Start Recording**: Press `Ctrl+Space` or click the "🎤 Start Listening" button
-2. **Speak Clearly**: Watch the real-time audio level indicator
-3. **Stop Recording**: Press `Ctrl+Space` again or click "⏹️ Stop Listening"
-4. **Get Results**: Text is automatically copied to clipboard and appears in the interface
-
-### Interface Overview
-
-- **🎤 Recording Button**: Manual start/stop recording
-- **⏱️ Timer**: Shows recording duration
-- **📊 Audio Levels**: Real-time microphone input visualization
-- **💬 Current Transcription**: Most recent speech-to-text result
-- **📜 History**: Expandable list of all previous transcriptions
-- **⚙️ Settings**: Customize appearance, audio, and behavior
-
-### Global Hotkeys
-
-- `Ctrl+Space` - Toggle recording on/off (customizable in settings)
-
-### CLI Commands
+Then confirm:
 
 ```bash
-# Show version and system info
-dictator --version
-
-# List available audio input devices
-dictator --list-devices
-
-# Show current audio configuration
-dictator --device-info
-
-# Set audio input device
-dictator --set-device <device_id>
-
-# Start without system tray
-dictator --no-tray
-
-# Show help
-dictator --help
+dictator doctor
 ```
 
-## 🔧 Configuration
+### Why the systemd unit is not optional on GNOME
 
-DICTATOR stores its configuration in `~/.config/dictator/config.json`. Key settings include:
+GNOME refuses global-shortcut requests from applications it cannot identify,
+and xdg-desktop-portal derives that identity from the systemd unit a process
+runs under:
 
-- **Audio Device**: Microphone selection
-- **Hotkey**: Customizable key combination
-- **UI Appearance**: Colors, fonts, transparency
-- **Window Behavior**: Always-on-top, auto-hide settings
-- **Session Management**: Current and saved sessions
+```
+gnome-control-c: Discarded shortcut bind request from application
+                 with an invalid app_id ><.
+```
 
-## 🎨 Customization
+A daemon started from a shell has no unit, so no identity, so no shortcut.
+`dictator setup --install` is what gives it one.
 
-Access the settings panel by clicking the ⚙️ gear icon:
+## Using it
 
-### Audio Settings
-- Select microphone input device
-- Adjust recording sensitivity
-- Configure speech timeout settings
+| Command | What it does |
+|---|---|
+| `dictator toggle` | Start dictating, or stop and deliver |
+| `dictator push` | Dictate for as long as the command runs |
+| `dictator cancel` | Discard the utterance in progress |
+| `dictator again [id]` | Deliver a stored transcript again |
+| `dictator status` | What the daemon is doing right now |
+| `dictator doctor` | Check every dependency and say what to fix |
+| `dictator watch` | Live transcription as you speak |
+| `dictator meter` | Live input levels in the terminal |
 
-### Appearance
-- **Window Opacity**: Adjust transparency (50-100%)
-- **Color Scheme**: Customize background, text, and accent colors
-- **Fonts**: Set different fonts and sizes for transcription and history
-- **Always On Top**: Keep window above other applications
+Everything goes through the daemon's D-Bus API, so `dictator toggle` works even
+where global shortcuts do not — bind it to a key yourself if you prefer.
 
-### Hotkeys
-- Customize the global recording hotkey
-- Choose from various key combinations
-
-### Sessions
-- Create named sessions for different contexts
-- Switch between sessions to organize transcriptions
-- Export session history
-
-## 🛠️ Development
-
-### Requirements
-
-- Python ≥3.8
-- PyQt6 ≥6.0.0
-- faster-whisper ≥0.10.0
-- sounddevice ≥0.4.0
-- pynput ≥1.6.0
-- speechrecognition ≥3.8.0
-
-#### CUDA Support (Optional, for GPU Acceleration)
-
-For GPU-accelerated transcription, you need:
-
-- **NVIDIA GPU** with compute capability ≥7.0
-- **NVIDIA Drivers** (≥450.x)
-- **CUDA Toolkit** installed on your system
-
-**CUDA 12 vs CUDA 13 Compatibility:**
-
-DICTATOR uses `faster-whisper` which requires CUDA 12 libraries (`libcublas.so.12`, etc.). If you have CUDA 13 installed on your system, the application automatically handles this by using PyTorch's bundled CUDA 12 libraries.
-
-**Automatic Setup (Recommended):**
-
-DICTATOR includes PyTorch as a dependency, which bundles all necessary CUDA 12 libraries. The application automatically detects and configures these libraries at runtime - **no manual setup required**. Your system CUDA installation (whether 12 or 13) remains untouched.
-
-**Manual cuDNN Installation (Optional):**
-
-If you prefer to install CUDA 12 libraries system-wide:
+## Configuration
 
 ```bash
-# For systems with CUDA 13.x
-sudo dnf install libcudnn9-cuda-12  # Installs CUDA 12 libs alongside CUDA 13
-
-# For CUDA 12.x systems
-sudo dnf install libcudnn9-cuda-12
-
-# For Debian/Ubuntu
-sudo apt install libcudnn9-cuda-12
+dictator config list              # every setting, and where it came from
+dictator config set model.name small
+dictator config sample            # a fully commented reference file
+dictator config edit              # open it in $EDITOR
 ```
 
-**Note:**
-- Installing CUDA 12 libraries on a CUDA 13 system is safe - they coexist without conflicts
-- If GPU acceleration fails, DICTATOR automatically falls back to CPU mode
-- Check logs in `~/.config/dictator/logs/` to verify GPU detection
+Settings are layered: built-in defaults, then `/etc/dictator/config.toml`, then
+`~/.config/dictator/config.toml`, then `DICTATOR_*` environment variables, then
+command-line overrides. Changes apply to the running daemon immediately.
 
-### Development Setup
+### Shortcuts
 
 ```bash
-# Clone the repository
-git clone https://github.com/chris17453/dictator.git
-cd dictator
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install in development mode
-pip install -e ".[test]"
-
-# Run tests
-pytest
-
-# Run with development settings
-python -m src.dictator
+dictator keys list
+dictator keys set dictate "Super+d"
+dictator keys check "Ctrl+Alt+Space"    # validate without binding
+dictator keys conflicts                 # what the desktop has already taken
 ```
 
-### Project Structure
+### Models
 
-```
-dictator/
-├── src/                    # Main source code
-│   ├── dictator.py        # Main application window
-│   ├── cli.py             # Command line interface
-│   ├── gui.py             # GUI startup and management
-│   ├── recorder.py        # Audio recording and processing
-│   ├── hotkey_manager.py  # Global hotkey handling
-│   ├── settings_ui.py     # Settings dialog
-│   └── version.py         # Version information
-├── desktop/               # Desktop integration files
-│   ├── *.png             # Application icons
-│   └── dictator.desktop  # Linux desktop entry
-├── scripts/               # Utility scripts
-└── tests/                 # Test suite
-```
-
-## 🐧 Linux Integration
-
-DICTATOR includes proper Linux desktop integration:
-
-- **Desktop Entry**: Appears in application menus and launchers
-- **System Tray**: Minimize to system tray with context menu
-- **Global Hotkeys**: System-wide keyboard shortcuts (requires input group membership)
-- **Icons**: Multi-resolution icons for different display sizes
-- **Notifications**: System notifications for recording status
-
-### Permission Setup
-
-For global hotkeys to work on Linux, your user must be in the `input` group:
+`auto` picks `large-v3-turbo` on a GPU and `base` on a CPU.
 
 ```bash
-# Automated setup
-sudo usermod -a -G input $USER
-
-# Then log out and back in, or run:
-newgrp input
+dictator models list
+dictator models set large-v3-turbo
+dictator models download small
 ```
 
-## 🔍 Troubleshooting
+Weights are checked against a recorded SHA-256 before they load. The first time
+a model is seen its digest is recorded and enforced from then on — trust on
+first use, which is weaker than a shipped pin, and is described that way rather
+than dressed up.
 
-### Common Issues
+### Microphone
 
-**Global hotkeys not working (Linux)**:
-- Ensure you're in the `input` group: `groups | grep input`
-- Run the setup script: `bash scripts/setup-permissions.sh`
-- Log out and back in after adding to the group
+```bash
+dictator devices              # list, with the active one marked
+dictator devices set yeti     # matches on name or description
+dictator devices cycle        # bindable to a shortcut
+```
 
-**No audio input detected**:
-- Check available devices: `dictator --list-devices`
-- Set the correct device: `dictator --set-device <id>`
-- Verify microphone permissions in system settings
+Devices are addressed by stable name, never by a positional index, and the
+daemon reacts to a device disappearing rather than discovering it at the next
+attempt.
 
-**Poor transcription quality**:
-- Ensure a quiet environment
-- Check microphone levels in the audio level indicator
-- Speak clearly and at a consistent pace
-- Consider using a better quality microphone
+### Memory
 
-**Window not visible**:
-- The window might be off-screen after resolution changes
-- Delete `~/.config/dictator/config.json` to reset window position
-- Or use `dictator --no-tray` to force window visibility
+Every utterance is stored in SQLite with a full-text index.
 
-**CUDA/GPU not working**:
-- Error: `Library libcublas.so.12 is not found or cannot be loaded`
-  - This means faster-whisper is looking for CUDA 12 libraries but can't find them
-  - **Solution**: DICTATOR automatically uses PyTorch's bundled CUDA 12 libraries
-  - If this fails, ensure PyTorch is properly installed: `uv pip install --pre torch --index-url https://download.pytorch.org/whl/nightly/cu124`
-  - The bundled libraries work alongside any system CUDA version (12 or 13)
-- Error: `Unable to load any of {libcudnn_ops.so...}`
-  - Less common; usually means ctranslate2 needs additional libraries
-  - Install system CUDA 12 libraries: `sudo dnf install libcudnn9-cuda-12` (safe to install alongside CUDA 13)
-- Error: `no kernel image is available for execution on the device`
-  - Your GPU is too new for the current PyTorch version
-  - For RTX 50-series GPUs: Use PyTorch nightly (already configured in dependencies)
-  - App will automatically fall back to CPU if GPU incompatibility is detected
-- Verify CUDA detection:
-  - Check logs in `~/.config/dictator/logs/` for "CUDA available" and "Added PyTorch CUDA 12 libraries" messages
-  - Look for "Using GPU: [your GPU name]" in startup logs
-  - App will automatically fall back to CPU if CUDA fails (no errors, just slower)
+```bash
+dictator history
+dictator search "quarterly forecast"
+dictator again 42
+```
 
-### Getting Help
+Audio is **not** retained by default. Retention is bounded
+(`memory.retain_days`), and `memory.redact_patterns` matches text that is
+delivered but never stored.
 
-- Check the [GitHub Issues](https://github.com/chris17453/dictator/issues)
-- Run `dictator --version` to see system information
-- Use `dictator --device-info` for audio configuration details
+### Lexicon
 
-## 📄 License
+Words the recogniser should expect, and rewrites it should always apply.
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+```bash
+dictator lexicon add ctranslate2 Kubernetes
+dictator lexicon fix cubernetes Kubernetes
+```
 
-## 👨‍💻 Author
+Learning from your corrections is opt-in (`lexicon.learn`) and requires a
+correction to be seen repeatedly before it is trusted.
 
-**Chris Watkins**
-- Email: chris@watkinslabs.com
-- GitHub: [@chris17453](https://github.com/chris17453)
+## How it works
 
-## 🤝 Contributing
+One long-lived user service holds everything that must be warm, stateful, or
+consented: the resident model, the open audio stream, and the platform
+sessions. Every client — the CLI, and any future UI — is an ordinary subscriber
+to its D-Bus contract on `com.watkinslabs.Dictator1`.
 
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+```
+GlobalShortcuts / XGrabKey ──▶ dictatord ──▶ RemoteDesktop / XTEST ──▶ focused field
+                                  │
+                                  ├─ ring buffer (300 ms pre-roll) + VAD
+                                  ├─ streaming ASR on CUDA
+                                  └─ SQLite memory + lexicon
+```
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Capture runs continuously, so the 300 ms *before* the chord registered is
+already in hand — which is why the first word is not clipped.
 
-## 🙏 Acknowledgments
+### Platform support
 
-- [OpenAI Whisper](https://github.com/openai/whisper) for the speech recognition model
-- [faster-whisper](https://github.com/guillaumekln/faster-whisper) for optimized Whisper implementation
-- [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) for the GUI framework
-- The open-source community for inspiration and tools
+| Environment | Shortcuts | Injection | App detection | Tier |
+|---|---|---|---|---|
+| GNOME · Wayland | portal | portal | chord-bound | 1 |
+| Any WM · X11 | XGrabKey | XTEST | automatic | 1 |
+| KDE · Wayland | portal | portal | chord-bound | 2 |
+| Sway / Hyprland | portal | wtype | chord-bound | 2 |
+| Headless / CI | none | clipboard | n/a | 3 |
 
----
+The display server is detected once, in strict order, keying on
+`XDG_SESSION_TYPE` first — because under XWayland `DISPLAY` is set on a Wayland
+session, and `if DISPLAY: use_x11()` picks the broken path on every modern
+desktop.
 
-**Made with ❤️ for productive dictation workflows**
+**One asymmetry, stated plainly.** X11 exposes the focused window's class, so
+paste profiles (a terminal needs `Ctrl+Shift+V`) are automatic. Wayland exposes
+no such thing through any standard interface. There, bind a second chord:
+
+```bash
+dictator keys set dictate_terminal "Super+Shift+d"
+```
+
+**One security note, also plainly.** X11 places no restriction on grabbing keys
+or injecting input — any client can do both to any other, silently. Wayland's
+portal consent is not friction; it is the security property. X11 is supported
+because people run it, not because it is equivalent. `dictator doctor` reports
+which trust model is active.
+
+## Development
+
+```bash
+make dev
+make test          # 155 tests, no display server required
+make daemon        # run in the foreground with debug logging
+make logs          # follow the service log
+```
+
+The test suite targets the D-Bus contract, not internals, and runs entirely
+headless — which is the point of the null backends.
+
+## Requirements
+
+- Python 3.10+
+- PipeWire or PulseAudio
+- `wl-clipboard` on Wayland
+- A GPU is optional; `nvidia-cudnn-cu12` is needed for CUDA decoding
+
+## License
+
+MIT
