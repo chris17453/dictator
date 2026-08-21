@@ -482,13 +482,14 @@ class Daemon:
     # D-Bus surface
     # ------------------------------------------------------------------
 
-    async def toggle(self, options: dict) -> int:
+    async def toggle(self, options: dict) -> tuple[int, bool]:
+        """Start or stop. Returns (session id, whether it is now listening)."""
         profile = str(options.get("profile", "") or "")
         if self.session_manager.is_active:
             session = await self.session_manager.stop()
-            return session.id if session else 0
+            return (session.id if session else 0), False
         session = await self.session_manager.start(Mode.TOGGLE, profile_override=profile)
-        return session.id
+        return session.id, True
 
     async def push_begin(self, options: dict) -> int:
         profile = str(options.get("profile", "") or "")

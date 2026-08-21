@@ -20,6 +20,7 @@ import numpy as np
 from ..errors import Fault, FaultCode
 from ..logging import get_logger
 from .devices import Device, resolve
+from .resample import Resampler
 from .ring import RingBuffer
 
 log = get_logger(__name__)
@@ -72,6 +73,10 @@ class Capture:
         self._last_level_at = 0.0
         self._running = threading.Event()
         self._error_reported = False
+        #: The rate the device actually gave us, which is often not the rate
+        #: Whisper wants. Anything above the pipeline feeds through a resampler.
+        self.device_rate = self.sample_rate
+        self._resampler: Resampler | None = None
 
     # -- properties ------------------------------------------------------
 
@@ -107,30 +112,78 @@ class Capture:
         return self._device
 
     def _open(self, device: Device | None) -> None:
+        import os
+
         import sounddevice as sd
 
         self._error_reported = False
+        self._resampler = None
+        # A device reached through an aggregate has no PortAudio index of its
+        # own, so the stream would silently open the default source instead.
+        # The PulseAudio client library picks the source from the environment.
+        previous_source = os.environ.get("PULSE_SOURCE")
+        if device is not None and device.needs_routing:
+            os.environ["PULSE_SOURCE"] = device.server_source
+            log.debug("routing capture by name", source=device.server_source)
+        elif previous_source is not None:
+            del os.environ["PULSE_SOURCE"]
+        # Whisper wants 16 kHz, but plenty of microphones offer only 44.1 or
+        # 48 kHz and refuse anything else. Ask for what we want, then take what
+        # the device has and resample rather than failing.
+        candidates = [self.sample_rate]
+        if device is not None and int(device.sample_rate) not in candidates:
+            candidates.append(int(device.sample_rate))
+        for rate in (48000, 44100, 32000, 16000):
+            if rate not in candidates:
+                candidates.append(rate)
+
+        last_error: Exception | None = None
+        opened_rate = None
         try:
-            self._stream = sd.InputStream(
-                samplerate=self.sample_rate,
-                blocksize=self.block_size,
-                device=device.index if device else None,
-                channels=1,
-                dtype="float32",
-                callback=self._on_block,
-                finished_callback=self._on_finished,
+            for rate in candidates:
+                try:
+                    self._stream = sd.InputStream(
+                        samplerate=rate,
+                        blocksize=max(1, int(rate * self.block_size / self.sample_rate)),
+                        device=device.index if device else None,
+                        channels=1,
+                        dtype="float32",
+                        callback=self._on_block,
+                        finished_callback=self._on_finished,
+                    )
+                    self._stream.start()
+                    opened_rate = rate
+                    break
+                except Exception as exc:
+                    last_error = exc
+                    self._stream = None
+
+            if opened_rate is None:
+                raise Fault(
+                    code=FaultCode.STREAM_FAILED,
+                    message=(
+                        f"could not open {device.description if device else 'the default device'} "
+                        f"at any of {', '.join(str(r) for r in candidates)} Hz: {last_error}"
+                    ),
+                    remedy=(
+                        "Check the microphone is not held exclusively by another "
+                        "application, then run: dictator devices"
+                    ),
+                ) from last_error
+        finally:
+            if previous_source is None:
+                os.environ.pop("PULSE_SOURCE", None)
+            else:
+                os.environ["PULSE_SOURCE"] = previous_source
+
+        self.device_rate = opened_rate
+        if opened_rate != self.sample_rate:
+            self._resampler = Resampler(opened_rate, self.sample_rate)
+            log.info(
+                "capturing at the device rate and resampling",
+                device_rate=opened_rate,
+                pipeline_rate=self.sample_rate,
             )
-            self._stream.start()
-        except Exception as exc:
-            self._stream = None
-            raise Fault(
-                code=FaultCode.STREAM_FAILED,
-                message=f"could not open {device.description if device else 'the default device'}: {exc}",
-                remedy=(
-                    "Check the microphone is connected and not held exclusively by "
-                    "another application, then run: dictator devices"
-                ),
-            ) from exc
         self._device = device
         self.ring.clear()
         self._running.set()
@@ -171,6 +224,10 @@ class Capture:
                     log.warning("audio stream status", status=str(status))
 
             mono = np.asarray(indata[:, 0], dtype=np.float32)
+            if self._resampler is not None:
+                mono = self._resampler.process(mono)
+                if mono.size == 0:
+                    return
             self.ring.write(mono)
 
             if self._audio_callback is not None and self._loop is not None:

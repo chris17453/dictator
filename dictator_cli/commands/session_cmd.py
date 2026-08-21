@@ -17,8 +17,8 @@ def toggle(argv: list[str]) -> int:
                         help="Delivery profile: standard, terminal, clipboard-only.")
     args = parser.parse_args(argv)
 
-    session_id = run(lambda c: c.toggle(args.profile))
-    print("listening" if session_id else "stopped")
+    _session_id, listening = run(lambda c: c.toggle(args.profile))
+    print("listening" if listening else "stopped")
     return 0
 
 

@@ -77,9 +77,11 @@ class Client:
     async def state(self) -> dict:
         return plain(await self.interface.call_get_state())
 
-    async def toggle(self, profile: str = "") -> int:
+    async def toggle(self, profile: str = "") -> tuple[int, bool]:
+        """Returns (session id, whether dictation is now listening)."""
         options = {"profile": Variant("s", profile)} if profile else {}
-        return await self.interface.call_toggle(options)
+        session_id, listening = await self.interface.call_toggle(options)
+        return int(session_id), bool(listening)
 
     async def push_begin(self, profile: str = "") -> int:
         options = {"profile": Variant("s", profile)} if profile else {}

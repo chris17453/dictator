@@ -72,12 +72,15 @@ async def test_headless_selects_null_backends(daemon):
 
 
 async def test_toggle_starts_and_stops(daemon):
-    session_id = await daemon.toggle({})
-    assert session_id > 0
+    session_id, listening = await daemon.toggle({})
+    assert session_id > 0 and listening is True
     assert daemon.session_manager.state is State.LISTENING
 
     daemon.session_manager.feed(np.full(16000, 0.2, dtype=np.float32))
-    assert await daemon.toggle({}) == session_id
+    # The flag is what distinguishes start from stop. Returning only an id
+    # left the CLI reporting "listening" as it stopped.
+    stopped_id, listening = await daemon.toggle({})
+    assert stopped_id == session_id and listening is False
     assert daemon.session_manager.state is State.IDLE
 
 

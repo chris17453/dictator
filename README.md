@@ -126,6 +126,16 @@ FreeRDP `/microphone`, Remmina's *Redirect microphone*, or in Windows `mstsc`
 under Remote audio → *Record from this computer*. It has no camera redirection
 at all.
 
+You can also present a microphone to the remote session yourself, without any
+client support, using a virtual source:
+
+```bash
+pactl load-module module-null-sink sink_name=mic_bridge
+pactl load-module module-remap-source master=mic_bridge.monitor source_name=bridged_mic
+# then stream your local microphone into mic_bridge over SSH, ffmpeg, etc.
+dictator devices set bridged_mic
+```
+
 Often the better answer is to run dictator on the machine the microphone is
 plugged into: its synthetic keystrokes reach the remote session through the
 client anyway, with no audio crossing the wire. `dictator doctor` detects this

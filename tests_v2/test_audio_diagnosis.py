@@ -102,3 +102,66 @@ def test_diagnosis_never_raises_when_enumeration_fails(monkeypatch):
     monkeypatch.setattr(dev, "_session_is_remote", lambda: False)
     monkeypatch.setattr(dev, "enumerate_devices", boom)
     assert dev.diagnose().ok is False
+
+
+# -- phantom devices -------------------------------------------------------
+
+
+def test_a_source_portaudio_already_exposes_is_not_duplicated(monkeypatch):
+    """The duplicate resolved to the aggregate index and captured silence.
+
+    PipeWire names a source "remote_mic" while PortAudio shows its description,
+    "Remote-Microphone". Adding the PipeWire name as a second device produced
+    two entries for one microphone, one of which quietly recorded nothing.
+    """
+    monkeypatch.setattr(dev, "_pipewire_sources", lambda: [("remote_mic", "remote_mic")])
+
+    class FakeSoundDevice:
+        @staticmethod
+        def query_devices():
+            return [
+                {"name": "pipewire", "max_input_channels": 64, "default_samplerate": 44100},
+                {"name": "Remote-Microphone", "max_input_channels": 1,
+                 "default_samplerate": 48000},
+            ]
+
+        class default:
+            device = (0, 0)
+
+    monkeypatch.setitem(__import__("sys").modules, "sounddevice", FakeSoundDevice)
+    names = [d.name for d in dev.enumerate_devices()]
+    assert names.count("remote-microphone") == 1
+    assert "remote-mic" not in names, "the PipeWire spelling must not become a second device"
+
+
+def test_a_source_portaudio_cannot_see_is_added_and_flagged_for_routing(monkeypatch):
+    monkeypatch.setattr(dev, "_pipewire_sources", lambda: [("usb_yeti", "Blue Yeti")])
+
+    class FakeSoundDevice:
+        @staticmethod
+        def query_devices():
+            return [{"name": "pipewire", "max_input_channels": 64,
+                     "default_samplerate": 44100}]
+
+        class default:
+            device = (0, 0)
+
+    monkeypatch.setitem(__import__("sys").modules, "sounddevice", FakeSoundDevice)
+    extra = [d for d in dev.enumerate_devices() if d.name == "usb-yeti"]
+    assert len(extra) == 1
+    # It has no PortAudio index of its own, so capture must be routed by name.
+    assert extra[0].needs_routing
+    assert extra[0].server_source == "usb_yeti"
+
+
+@pytest.mark.parametrize("candidate,existing,same", [
+    ("blue-yeti", "blue-yeti-usb", True),
+    # PipeWire spells it alsa_input.usb-Blue_Yeti, PortAudio just "Blue Yeti".
+    # Recognising those as one device is the whole point.
+    ("alsa-input-usb-blue-yeti", "blue-yeti", True),
+    ("remote-mic", "remote-microphone", True),
+    ("blue-yeti", "logitech-webcam", False),
+    ("", "blue-yeti", False),
+])
+def test_device_name_similarity(candidate, existing, same):
+    assert dev._looks_like(candidate, existing) is same

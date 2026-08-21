@@ -52,6 +52,13 @@ class Device:
     channels: int
     sample_rate: float
     is_default: bool = False
+    #: Sound-server source name, when this device is reached through an
+    #: aggregate rather than being a PortAudio device in its own right.
+    server_source: str = ""
+
+    @property
+    def needs_routing(self) -> bool:
+        return bool(self.server_source)
 
     def matches(self, query: str) -> bool:
         query = query.strip().lower()
@@ -157,16 +164,21 @@ def enumerate_devices() -> list[Device]:
             )
         )
 
-    # Where the sound server knows about real microphones that PortAudio has
-    # collapsed into an aggregate device, present the real ones and open them
-    # through the aggregate.
-    aggregate = next(
-        (d for d in devices if d.name in ("pipewire", "pulse", "default")), None
-    )
+    # The sound server may know about microphones PortAudio has collapsed into
+    # an aggregate. Add only those it genuinely does not expose: adding one it
+    # already lists creates a duplicate that resolves to the aggregate index
+    # and therefore captures silence, while looking like a valid choice.
+    aggregate = next((d for d in devices if is_aggregate(d)), None)
     if aggregate is not None:
+        known = {d.name for d in devices}
+        # PipeWire names a source "alsa_input.usb-Blue_Yeti" while PortAudio
+        # shows its description, "Blue Yeti". Compare on both, loosely.
+        known |= {_slug(d.description) for d in devices}
         for source_name, source_description in _pipewire_sources():
             slug = _slug(source_name)
-            if any(d.name == slug for d in devices):
+            if slug in known or _slug(source_description) in known:
+                continue
+            if any(_looks_like(slug, existing) for existing in known):
                 continue
             devices.append(
                 Device(
@@ -176,9 +188,24 @@ def enumerate_devices() -> list[Device]:
                     channels=1,
                     sample_rate=aggregate.sample_rate,
                     is_default=False,
+                    # Reached through the aggregate, so capture has to be
+                    # routed by name at stream-open time.
+                    server_source=source_name,
                 )
             )
     return devices
+
+
+def _looks_like(candidate: str, existing: str) -> bool:
+    """Whether two device slugs plausibly name the same hardware.
+
+    PipeWire and PortAudio spell the same microphone differently, and the
+    difference is usually a prefix or a trailing qualifier rather than a
+    different device.
+    """
+    if not candidate or not existing:
+        return False
+    return candidate in existing or existing in candidate
 
 
 #: PortAudio names that route to the sound server rather than to hardware.

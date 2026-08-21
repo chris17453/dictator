@@ -121,8 +121,14 @@ class DictatorInterface(ServiceInterface):
 
     @method()
     @translates_faults
-    async def Toggle(self, options: "a{sv}") -> "u":  # noqa: F821
-        return await self._daemon.toggle(_plain(options))
+    async def Toggle(self, options: "a{sv}") -> "(ub)":  # noqa: F821
+        """(session id, listening). The flag is what distinguishes start from stop.
+
+        Returning only an id made the two indistinguishable, and signalling
+        "stopped" by negating it does not fit an unsigned signature.
+        """
+        session_id, listening = await self._daemon.toggle(_plain(options))
+        return [session_id, listening]
 
     @method()
     @translates_faults
