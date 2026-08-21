@@ -5,6 +5,7 @@ whenever something is plugged in — the cause of G-14.
 """
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 
@@ -12,6 +13,29 @@ from ..errors import Fault, FaultCode
 from ..logging import get_logger
 
 log = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class AudioDiagnosis:
+    """Whether audio capture can actually work, and what to do if not.
+
+    PortAudio on a PipeWire host advertises aggregate devices named "pipewire"
+    and "default" whether or not a single microphone exists behind them. Taking
+    their presence as proof of a working microphone reports a healthy tick over
+    a session that cannot hear anything — which is exactly the silent-failure
+    behaviour this rewrite exists to remove (G-08).
+    """
+
+    ok: bool
+    summary: str
+    remedy: str = ""
+    real_sources: int = 0
+    remote_session: bool = False
+
+    @property
+    def is_warning(self) -> bool:
+        """A remote session without redirection is a setup gap, not a defect."""
+        return not self.ok and self.remote_session
 
 
 @dataclass(frozen=True)
@@ -155,6 +179,92 @@ def enumerate_devices() -> list[Device]:
                 )
             )
     return devices
+
+
+#: PortAudio names that route to the sound server rather than to hardware.
+AGGREGATE_NAMES = frozenset({"pipewire", "pulse", "default", "sysdefault"})
+
+
+def is_aggregate(device: "Device") -> bool:
+    return device.name in AGGREGATE_NAMES
+
+
+def _session_is_remote() -> bool:
+    """Whether this login session has no local seat.
+
+    A remote session reaches no local sound card, so its microphone must be
+    redirected by the remote-desktop protocol rather than found on the host.
+    """
+    import shutil
+    import subprocess
+
+    session_id = os.environ.get("XDG_SESSION_ID")
+    if shutil.which("loginctl") is None:
+        return False
+    try:
+        result = subprocess.run(
+            ["loginctl", "show-session", session_id or "auto", "-p", "Remote", "-p", "Seat"],
+            capture_output=True, text=True, timeout=3,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if result.returncode != 0:
+        return False
+    values = dict(
+        line.split("=", 1) for line in result.stdout.splitlines() if "=" in line
+    )
+    return values.get("Remote") == "yes" or not values.get("Seat", "").strip()
+
+
+def diagnose() -> AudioDiagnosis:
+    """Report whether a real capture source exists, not merely a device entry."""
+    sources = _pipewire_sources()
+    remote = _session_is_remote()
+
+    if sources:
+        return AudioDiagnosis(
+            ok=True,
+            summary=f"{len(sources)} capture source(s)",
+            real_sources=len(sources),
+            remote_session=remote,
+        )
+
+    try:
+        devices = enumerate_devices()
+    except Fault:
+        devices = []
+    hardware = [d for d in devices if not is_aggregate(d)]
+    if hardware:
+        # No sound server, but PortAudio sees real hardware directly.
+        return AudioDiagnosis(
+            ok=True,
+            summary=f"{len(hardware)} device(s) via PortAudio",
+            real_sources=len(hardware),
+            remote_session=remote,
+        )
+
+    if remote:
+        return AudioDiagnosis(
+            ok=False,
+            summary="none — this is a remote session with no microphone redirected",
+            remedy=(
+                "Enable microphone redirection in your remote-desktop client "
+                "(FreeRDP: /microphone; Remmina: Redirect microphone; Windows "
+                "mstsc: Remote audio > Record from this computer). Or run "
+                "dictator on the machine the microphone is plugged into — its "
+                "keystrokes reach this session through the client anyway."
+            ),
+            remote_session=True,
+        )
+
+    return AudioDiagnosis(
+        ok=False,
+        summary="none — no capture source exists",
+        remedy=(
+            "Connect a microphone, then check the sound server is running: "
+            "systemctl --user status pipewire"
+        ),
+    )
 
 
 def resolve(query: str | None) -> Device | None:

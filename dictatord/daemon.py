@@ -251,6 +251,18 @@ class Daemon:
             self._report(fault)
 
     async def _start_capture(self) -> None:
+        # Check for a capture source before opening a stream. PortAudio's
+        # failure here is "Unanticipated host error [PaErrorCode -9999]",
+        # which tells the user nothing; the diagnosis tells them what to do.
+        diagnosis = device_catalog.diagnose()
+        if not diagnosis.ok:
+            self._report(Fault(
+                code=FaultCode.NO_DEVICE,
+                message=f"no microphone: {diagnosis.summary}",
+                remedy=diagnosis.remedy,
+            ))
+            log.warning("starting without audio capture")
+            return
         try:
             await self.capture.start(
                 self.config["audio.device"],

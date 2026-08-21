@@ -52,15 +52,27 @@ def _active() -> str:
 
 
 def _list() -> int:
+    diagnosis = devices.diagnose()
     found = devices.enumerate_devices()
-    if not found:
-        print("no input devices are present")
-        print(fmt.dim("  connect a microphone, then run this again"))
+
+    if not diagnosis.ok:
+        print(f"{fmt.WARN} {diagnosis.summary}")
+        if diagnosis.remedy:
+            print()
+            for line in _wrap(diagnosis.remedy, 72):
+                print(f"  {line}")
+        if found:
+            print()
+            print(fmt.dim(f"  ({len(found)} routing device(s) exist, but nothing to capture from)"))
         return 1
 
     active = _active()
     rows = []
     for device in found:
+        if devices.is_aggregate(device) and len(found) > 2:
+            # Routing entries, not microphones. Hide them once real sources
+            # exist, so the list is a list of things worth choosing.
+            continue
         marker = fmt.green("●") if device.name == active else " "
         tags = []
         if device.is_default:
@@ -77,6 +89,20 @@ def _list() -> int:
         print()
         print(fmt.dim("  no device chosen; the system default is used"))
     return 0
+
+
+def _wrap(text: str, width: int) -> list[str]:
+    words, out, line = text.split(), [], ""
+    for word in words:
+        candidate = f"{line} {word}".strip()
+        if len(candidate) > width and line:
+            out.append(line)
+            line = word
+        else:
+            line = candidate
+    if line:
+        out.append(line)
+    return out
 
 
 def _set(query: str) -> int:

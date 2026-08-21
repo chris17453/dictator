@@ -307,19 +307,27 @@ def _model_check(checks: list[Check], config) -> None:
 
 
 def _audio_check(checks: list[Check], config) -> None:
-    try:
-        from dictatord.audio import devices as device_catalog
+    from dictatord.audio import devices as device_catalog
 
+    # Ask whether a capture source actually exists, rather than trusting the
+    # aggregate device PortAudio advertises regardless.
+    diagnosis = device_catalog.diagnose()
+    if not diagnosis.ok:
+        checks.append(Check(
+            "microphone", False, diagnosis.summary,
+            remedy=diagnosis.remedy,
+            warn=diagnosis.is_warning,
+            extra=(
+                ["Everything else works; only capture is missing."]
+                if diagnosis.is_warning else []
+            ),
+        ))
+        return
+
+    try:
         found = device_catalog.enumerate_devices()
     except Fault as fault:
         checks.append(Check("audio devices", False, fault.message, fault.remedy))
-        return
-
-    if not found:
-        checks.append(Check(
-            "audio devices", False, "no input devices are present",
-            remedy="Connect a microphone, then run: dictator devices",
-        ))
         return
 
     wanted = config["audio.device"]
@@ -331,9 +339,13 @@ def _audio_check(checks: list[Check], config) -> None:
             remedy="" if match else "Choose another: dictator devices",
         ))
     else:
-        default = next((d for d in found if d.is_default), found[0])
+        real = [d for d in found if not device_catalog.is_aggregate(d)]
+        default = next((d for d in real if d.is_default), real[0] if real else found[0])
         checks.append(Check("microphone", True, f"{default.description} (system default)"))
-    checks.append(Check("audio devices", True, f"{len(found)} input device(s)"))
+    checks.append(Check(
+        "audio devices", True,
+        f"{diagnosis.real_sources} capture source(s), {len(found)} device entries",
+    ))
 
 
 def _memory_check(checks: list[Check], config) -> None:

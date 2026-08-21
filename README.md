@@ -119,6 +119,18 @@ dictator devices set yeti     # matches on name or description
 dictator devices cycle        # bindable to a shortcut
 ```
 
+**Remote sessions.** A session with no local seat reaches no local sound card,
+so a microphone has to be redirected by the remote-desktop protocol. GNOME
+Remote Desktop implements RDP audio input, but the *client* must ask for it —
+FreeRDP `/microphone`, Remmina's *Redirect microphone*, or in Windows `mstsc`
+under Remote audio → *Record from this computer*. It has no camera redirection
+at all.
+
+Often the better answer is to run dictator on the machine the microphone is
+plugged into: its synthetic keystrokes reach the remote session through the
+client anyway, with no audio crossing the wire. `dictator doctor` detects this
+situation and says so rather than reporting a microphone that cannot hear.
+
 Devices are addressed by stable name, never by a positional index, and the
 daemon reacts to a device disappearing rather than discovering it at the next
 attempt.
