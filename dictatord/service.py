@@ -8,7 +8,9 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from dbus_next import BusType, Variant
+import functools
+
+from dbus_next import BusType, DBusError, Variant
 from dbus_next.aio import MessageBus
 from dbus_next.constants import PropertyAccess
 from dbus_next.service import ServiceInterface, dbus_property, method, signal
@@ -24,6 +26,81 @@ log = get_logger(__name__)
 BUS_NAME = "com.watkinslabs.Dictator1"
 OBJECT_PATH = "/com/watkinslabs/Dictator1"
 INTERFACE = "com.watkinslabs.Dictator1"
+
+
+#: The D-Bus surface is a trust boundary: any process on the session bus can
+#: call it. Bounds are enforced here rather than deep in the daemon, where an
+#: oversized argument would already have been copied around.
+MAX_TEXT = 64 * 1024
+MAX_QUERY = 1024
+MAX_LIMIT = 1000
+MAX_NAME = 256
+
+
+ERROR_PREFIX = "com.watkinslabs.Dictator1.Error"
+
+
+def translates_faults(fn):
+    """Turn a Fault into a proper D-Bus error.
+
+    Without this, dbus-next serialises the Python traceback into the reply,
+    which hands every process on the session bus our file paths and internals
+    for what is usually just bad input.
+    """
+
+    @functools.wraps(fn)
+    async def async_wrapper(*args, **kwargs):
+        try:
+            return await fn(*args, **kwargs)
+        except Fault as fault:
+            raise _as_dbus_error(fault) from None
+
+    @functools.wraps(fn)
+    def sync_wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except Fault as fault:
+            raise _as_dbus_error(fault) from None
+
+    import inspect
+
+    return async_wrapper if inspect.iscoroutinefunction(fn) else sync_wrapper
+
+
+def _as_dbus_error(fault: Fault) -> DBusError:
+    # The remedy travels with the message: a client that only shows the error
+    # string still tells the user what to do about it.
+    text = fault.message + (f" — {fault.remedy}" if fault.remedy else "")
+    suffix = "".join(part.capitalize() for part in fault.code.value.split("."))
+    return DBusError(f"{ERROR_PREFIX}.{suffix}", text)
+
+
+def _bounded(value: str, limit: int, what: str) -> str:
+    if not isinstance(value, str):
+        raise Fault(
+            code=FaultCode.INTERNAL,
+            message=f"{what} must be text",
+            remedy="This is a client bug; report it.",
+        )
+    if len(value) > limit:
+        raise Fault(
+            code=FaultCode.INTERNAL,
+            message=f"{what} is longer than the {limit} character limit",
+            remedy="Shorten it.",
+        )
+    # Control characters have no business in a name, a query, or a chord, and
+    # they corrupt terminal output when echoed back in a fault message.
+    if any(ord(c) < 32 and c not in "\t\n" for c in value):
+        raise Fault(
+            code=FaultCode.INTERNAL,
+            message=f"{what} contains control characters",
+            remedy="Remove them.",
+        )
+    return value
+
+
+def _bounded_limit(value: int) -> int:
+    return max(1, min(int(value or 20), MAX_LIMIT))
 
 
 def _sv(mapping: dict) -> dict[str, Variant]:
@@ -43,62 +120,104 @@ class DictatorInterface(ServiceInterface):
     # -- methods ---------------------------------------------------------
 
     @method()
+    @translates_faults
     async def Toggle(self, options: "a{sv}") -> "u":  # noqa: F821
         return await self._daemon.toggle(_plain(options))
 
     @method()
+    @translates_faults
     async def PushBegin(self, options: "a{sv}") -> "u":  # noqa: F821
         return await self._daemon.push_begin(_plain(options))
 
     @method()
+    @translates_faults
     async def PushEnd(self) -> "u":  # noqa: F821
         return await self._daemon.push_end()
 
     @method()
+    @translates_faults
     async def Cancel(self) -> "b":  # noqa: F821
         return await self._daemon.cancel()
 
     @method()
+    @translates_faults
     async def Redeliver(self, entry_id: "u", options: "a{sv}") -> "b":  # noqa: F821
         return await self._daemon.redeliver(int(entry_id), _plain(options))
 
     @method()
+    @translates_faults
     async def SetDevice(self, name: "s") -> "s":  # noqa: F821
-        return await self._daemon.set_device(name)
+        return await self._daemon.set_device(_bounded(name, MAX_NAME, "the device name"))
 
     @method()
+    @translates_faults
     def ListDevices(self) -> "a(ssbb)":  # noqa: F821
         return self._daemon.list_devices()
 
     @method()
+    @translates_faults
     async def SetModel(self, name: "s", options: "a{sv}") -> "a{sv}":  # noqa: F821
-        return _sv(await self._daemon.set_model(name, _plain(options)))
+        return _sv(await self._daemon.set_model(
+            _bounded(name, MAX_NAME, "the model name"), _plain(options)
+        ))
 
     @method()
+    @translates_faults
     def ListModels(self) -> "a(ssbbs)":  # noqa: F821
         return self._daemon.list_models()
 
     @method()
+    @translates_faults
     def Search(self, query: "s", limit: "u") -> "s":  # noqa: F821
-        return json.dumps(self._daemon.search(query, int(limit)))
+        return json.dumps(self._daemon.search(
+            _bounded(query, MAX_QUERY, "the search query"), _bounded_limit(limit)
+        ))
 
     @method()
+    @translates_faults
     def GetState(self) -> "a{sv}":  # noqa: F821
         return _sv(self._daemon.state_snapshot())
 
     @method()
+    @translates_faults
+    def GetMetrics(self) -> "s":  # noqa: F821
+        """Counters, latency percentiles, and a health verdict, as JSON."""
+        snapshot = self._daemon.metrics.snapshot()
+        # Overlay the daemon's own verdict so 'stats' and 'health' can never
+        # disagree: the daemon knows about consent still being pending, which
+        # the raw counters cannot.
+        verdict = self._daemon.health()
+        snapshot["health"] = verdict["status"]
+        if verdict.get("problems"):
+            snapshot["problems"] = verdict["problems"].split("; ")
+        return json.dumps(snapshot)
+
+    @method()
+    @translates_faults
+    def GetHealth(self) -> "a{sv}":  # noqa: F821
+        """A blunt verdict for monitoring: healthy, degraded, or starting."""
+        return _sv(self._daemon.health())
+
+    @method()
+    @translates_faults
     async def Reload(self) -> "a{sv}":  # noqa: F821
         return _sv(await self._daemon.reload())
 
     @method()
+    @translates_faults
     async def SetShortcut(self, shortcut_id: "s", chord: "s") -> "a{sv}":  # noqa: F821
-        return _sv(await self._daemon.set_shortcut(shortcut_id, chord))
+        return _sv(await self._daemon.set_shortcut(
+            _bounded(shortcut_id, MAX_NAME, "the shortcut name"),
+            _bounded(chord, MAX_NAME, "the chord"),
+        ))
 
     @method()
+    @translates_faults
     def ListShortcuts(self) -> "a(sss)":  # noqa: F821
         return self._daemon.list_shortcuts()
 
     @method()
+    @translates_faults
     async def Quit(self) -> "":  # noqa: F722
         await self._daemon.request_shutdown()
 

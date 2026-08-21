@@ -1,0 +1,107 @@
+name: ci
+
+on:
+  push:
+    branches: [main, "v2-*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        # PortAudio for sounddevice, dbus for the service contract. No display
+        # server is installed on purpose: the suite must pass headless.
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libportaudio2 libsndfile1 dbus-x11
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --group dev
+
+      - name: Syntax check
+        run: uv run python -m compileall -q dictatord dictator_cli
+
+      - name: Test
+        # A session bus so D-Bus code paths are exercised rather than skipped.
+        run: dbus-run-session -- uv run pytest -q
+
+      - name: Verify the daemon starts headless and answers
+        run: |
+          dbus-run-session -- bash -euo pipefail -c '
+            uv run dictatord --set model.keep_resident=false \
+                             --set streaming.enabled=false &
+            for _ in $(seq 30); do
+              if uv run dictator health --json >/dev/null 2>&1; then break; fi
+              sleep 1
+            done
+            uv run dictator status
+            uv run dictator health --json
+            uv run dictator doctor || true
+            uv run dictator quit
+          '
+
+  package:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Build the wheel and sdist
+        run: uv build
+      - name: Check the metadata
+        run: |
+          uv tool run twine check dist/*
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  security:
+    name: security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      - name: TLS verification must never be disabled
+        # v1 replaced ssl._create_default_https_context process-wide and pushed
+        # verify=False into huggingface_hub. That regression must not return.
+        run: |
+          # Sites that legitimately name the bypass in order to detect it are
+          # marked; everything else naming it is a regression.
+          hits=$(grep -rn "_create_unverified_context\|verify[[:space:]]*=[[:space:]]*False" \
+                   dictatord/ dictator_cli/ \
+                 | grep -v "tls-audit-allow" || true)
+          if [ -n "$hits" ]; then
+            echo "$hits"
+            echo "::error::TLS verification bypass found"
+            exit 1
+          fi
+          echo "no TLS bypass present"
+
+      - name: No secrets committed
+        run: |
+          if grep -rnE "(api[_-]?key|secret|password|token)\s*=\s*[\"'][A-Za-z0-9/+_-]{16,}" \
+               dictatord/ dictator_cli/; then
+            echo "::error::possible hardcoded credential"
+            exit 1
+          fi
+          echo "no hardcoded credentials"

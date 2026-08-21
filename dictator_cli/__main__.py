@@ -23,6 +23,7 @@ from .commands import (
     models_cmd,
     service_cmd,
     session_cmd,
+    stats_cmd,
     watch_cmd,
 )
 
@@ -37,6 +38,8 @@ COMMANDS = {
     # inspection
     "status": session_cmd.status,
     "doctor": doctor_cmd.run,
+    "stats": stats_cmd.stats,
+    "health": stats_cmd.health,
     "meter": watch_cmd.meter,
     "watch": watch_cmd.watch,
     # configuration
@@ -68,6 +71,8 @@ USAGE = """dictator — speech to text, without a window
   inspection
     status              what the daemon is doing right now
     doctor              check every dependency and say what to fix
+    stats               counters and measured latency percentiles
+    health              one-line verdict for monitoring (exit code)
     meter               live input levels in the terminal
     watch               live transcription as you speak
 

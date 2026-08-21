@@ -49,19 +49,64 @@ Description=Dictator speech-to-text service
 Documentation=https://github.com/chris17453/dictator
 PartOf=graphical-session.target
 After=graphical-session.target
+# These belong to the unit, not the service; systemd ignores them under
+# [Service] and the daemon would restart forever.
+StartLimitBurst=5
+StartLimitIntervalSec=60
 
 [Service]
 Type=simple
 ExecStart={_executable()}
 Restart=on-failure
 RestartSec=2
-# Give a crashing daemon room to be restarted, but stop flapping forever.
-StartLimitBurst=5
-StartLimitIntervalSec=60
 Slice=app.slice
 # The portal reads our identity from this unit's name; changing it breaks
 # global shortcuts on GNOME.
 Environment=PYTHONUNBUFFERED=1
+# Let an utterance already being transcribed finish before we are killed.
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+# --- sandboxing -------------------------------------------------------
+# This process listens to a microphone and can type into other windows, so
+# it is worth confining. Audio, the session bus, and the portal must still
+# work, which is what rules out the stricter options below each line.
+NoNewPrivileges=yes
+PrivateTmp=yes
+# Transcripts and the portal token are private to the user.
+UMask=0077
+ProtectSystem=strict
+ProtectHome=read-only
+# Our own state must stay writable despite ProtectSystem=strict. The leading
+# dash keeps a missing directory from failing the mount namespace outright.
+ReadWritePaths=-%h/.local/share/dictator
+ReadWritePaths=-%h/.local/state/dictator
+ReadWritePaths=-%h/.config/dictator
+ReadWritePaths=-%h/.cache/huggingface
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictSUIDSGID=yes
+RestrictRealtime=no
+RestrictNamespaces=yes
+LockPersonality=yes
+RemoveIPC=yes
+# PrivateDevices=yes would remove /dev/snd and the GPU; both are needed.
+DeviceAllow=char-alsa rw
+DeviceAllow=/dev/nvidiactl rw
+DeviceAllow=/dev/nvidia0 rw
+DeviceAllow=/dev/nvidia-uvm rw
+# AF_UNIX for the bus and PipeWire; INET only for model downloads.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+SystemCallArchitectures=native
+# Whisper on a GPU is memory-hungry; this is a runaway guard, not a target.
+MemoryMax=8G
 
 [Install]
 WantedBy=graphical-session.target
@@ -132,6 +177,12 @@ def _install(force: bool) -> int:
 
     unit = unit_dir / UNIT_NAME
     desktop = desktop_dir / f"{DESKTOP_ID}.desktop"
+
+    # The unit confines itself with ProtectSystem=strict, so the directories it
+    # is allowed to write must exist before systemd builds the namespace.
+    for directory in (cfg.data_dir(), cfg.state_dir(), cfg.models_dir(),
+                      cfg.user_config_path().parent):
+        directory.mkdir(parents=True, exist_ok=True)
 
     for path, text in ((unit, _unit_text()), (desktop, _desktop_text())):
         if path.is_file() and not force and path.read_text() == text:

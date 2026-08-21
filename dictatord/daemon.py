@@ -22,6 +22,7 @@ from .delivery.deliver import Deliverer
 from .errors import Fault, FaultCode
 from .logging import get_logger
 from .memory.lexicon import Lexicon
+from .metrics import Metrics
 from .memory.store import TranscriptStore
 from .platform import registry
 from .platform.appid import app_id
@@ -44,6 +45,11 @@ class Daemon:
         self.config = cfg
         self.started_at = time.time()
         self._shutdown = asyncio.Event()
+        self.metrics = Metrics()
+        #: Set while an utterance is being transcribed or delivered, so
+        #: shutdown can wait for it instead of discarding the user's words.
+        self._in_flight: asyncio.Event = asyncio.Event()
+        self._in_flight.set()
 
         self.capture = Capture(
             sample_rate=cfg["audio.sample_rate"],
@@ -285,6 +291,8 @@ class Daemon:
             from .service import _sv
 
             self.interface.StateChanged(state.value, _sv(detail))
+        if state is State.LISTENING:
+            self.metrics.sessions_started += 1
         if state is State.LISTENING and self.streamer is not None:
             session = self.session_manager.session
             if session is not None and not self.streamer.running:
@@ -296,10 +304,12 @@ class Daemon:
             self.interface.Level(*frame.as_tuple())
 
     async def _on_partial(self, partial: Partial) -> None:
+        self.metrics.partials_emitted += 1
         if self.interface is not None:
             self.interface.Partial(partial.session_id, partial.text, partial.stable_chars)
 
     def _on_device_lost(self, name: str) -> None:
+        self.metrics.device_losses += 1
         asyncio.create_task(self._handle_device_lost(name))
 
     async def _handle_device_lost(self, name: str) -> None:
@@ -329,14 +339,17 @@ class Daemon:
     # ------------------------------------------------------------------
 
     async def _on_session_finished(self, session: Session) -> None:
+        self._in_flight.clear()
         try:
-            await self._transcribe_and_deliver(session)
+            with self.metrics.time(self.metrics.end_to_end_ms):
+                await self._transcribe_and_deliver(session)
         except Fault as fault:
             self._report(fault)
         except Exception as exc:  # pragma: no cover
             log.error("utterance pipeline failed", error=str(exc))
         finally:
             self.session_manager.finish()
+            self._in_flight.set()
 
     async def _transcribe_and_deliver(self, session: Session) -> None:
         sample_rate = self.config["audio.sample_rate"]
@@ -344,15 +357,20 @@ class Daemon:
             await self.streamer.stop()
 
         prompt = self.lexicon.prompt() if self.config["lexicon.enabled"] else ""
-        result = await self.engine.transcribe(session.audio(), sample_rate, prompt=prompt)
+        with self.metrics.time(self.metrics.decode_ms):
+            result = await self.engine.transcribe(session.audio(), sample_rate, prompt=prompt)
+        self.metrics.utterance_s.observe(result.duration_s)
 
         text = self.lexicon.apply(result.text) if self.config["lexicon.enabled"] else result.text
         text = text.strip()
 
         if not text:
+            self.metrics.sessions_empty += 1
             log.info("nothing recognised", id=session.id,
                      seconds=round(session.duration_s(sample_rate), 2))
             return
+
+        self.metrics.confidence.observe(result.confidence)
 
         log.info(
             "transcribed",
@@ -379,9 +397,13 @@ class Daemon:
             return
 
         self.session_manager._set_state(State.DELIVERING, session=session.id)
-        delivery = await self.deliverer.deliver(
-            text, profile_override=session.profile_override
-        )
+        with self.metrics.time(self.metrics.delivery_ms):
+            delivery = await self.deliverer.deliver(
+                text, profile_override=session.profile_override
+            )
+        self.metrics.count_delivery(delivery.method, delivery.ok)
+        if delivery.ok:
+            self.metrics.sessions_delivered += 1
         if entry is not None:
             self.store.mark_delivered(
                 entry.id, delivery.method, delivery.app_id, delivery.ok
@@ -425,7 +447,10 @@ class Daemon:
     async def cancel(self) -> bool:
         if self.streamer is not None:
             await self.streamer.stop()
-        return await self.session_manager.cancel()
+        cancelled = await self.session_manager.cancel()
+        if cancelled:
+            self.metrics.sessions_cancelled += 1
+        return cancelled
 
     async def redeliver(self, entry_id: int, options: dict) -> bool:
         if not self.config["memory.enabled"]:
@@ -567,6 +592,7 @@ class Daemon:
             "transcripts": self.store.count() if self.config["memory.enabled"] else 0,
             "lexicon_terms": len(self.lexicon.terms),
             "app_id": app_id(),
+            "health": self.metrics.health()[0],
             "shortcuts_ready": self.shortcuts_ready,
             "injection_ready": self.injection_ready,
         }
@@ -583,6 +609,28 @@ class Daemon:
         if self.platform:
             snapshot.update(self.platform.describe())
         return snapshot
+
+    def health(self) -> dict:
+        """Readiness and liveness in one answer.
+
+        'starting' is distinct from 'degraded' on purpose: a daemon still
+        waiting for the user to approve a consent prompt is not broken, and a
+        monitor that restarts it would only re-ask the question.
+        """
+        status, problems = self.metrics.health()
+        ready = self.capture.running and (
+            self.shortcuts_ready or self.platform is None
+            or self.platform.shortcuts is None
+            or self.platform.shortcuts.name == "none"
+        )
+        if not ready and self.metrics.sessions_started == 0:
+            status, problems = "starting", (problems or ["waiting for setup to complete"])
+        return {
+            "status": status,
+            "ready": ready,
+            "problems": "; ".join(problems),
+            "uptime_s": int(self.metrics.uptime_s),
+        }
 
     async def reload(self) -> dict:
         cfg = config_module.load()
@@ -614,6 +662,7 @@ class Daemon:
                 await self.engine.maybe_unload_idle(seconds)
 
     def _report(self, fault: Fault) -> None:
+        self.metrics.count_fault(fault.code.value)
         log.error(fault.message, code=fault.code.value, remedy=fault.remedy)
         if self.interface is not None:
             self.interface.FaultOccurred(*fault.as_signal())
@@ -634,7 +683,32 @@ class Daemon:
                 pass
 
         await self._shutdown.wait()
+        await self._drain()
         await self.shutdown()
+
+    async def _drain(self, timeout: float = 20.0) -> None:
+        """Let an utterance already being transcribed finish.
+
+        A SIGTERM arriving mid-decode would otherwise throw away words the user
+        has already spoken — the one loss they cannot recover by retrying,
+        because the audio is gone with the process.
+        """
+        if self._in_flight.is_set() and not self.session_manager.is_active:
+            return
+        if self.session_manager.is_active:
+            log.info("stopping the utterance in progress before shutting down")
+            try:
+                await self.session_manager.stop()
+            except Exception as exc:  # pragma: no cover
+                log.error("could not stop the active session", error=str(exc))
+        try:
+            await asyncio.wait_for(self._in_flight.wait(), timeout)
+            log.info("in-flight utterance completed")
+        except asyncio.TimeoutError:
+            log.warning(
+                "an utterance was still being processed at shutdown; it is lost",
+                waited_s=timeout,
+            )
 
     async def shutdown(self) -> None:
         log.info("shutting down")

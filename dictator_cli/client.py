@@ -117,6 +117,14 @@ class Client:
     async def set_shortcut(self, shortcut_id: str, chord: str) -> dict:
         return plain(await self.interface.call_set_shortcut(shortcut_id, chord))
 
+    async def metrics(self) -> dict:
+        import json as _json
+
+        return _json.loads(await self.interface.call_get_metrics())
+
+    async def health(self) -> dict:
+        return plain(await self.interface.call_get_health())
+
     async def reload(self) -> dict:
         return plain(await self.interface.call_reload())
 

@@ -31,6 +31,11 @@ from ..client import is_running
 from ..client import run as client_run
 
 
+#: The name of the function v1 installed process-wide to disable certificate
+#: checking (G-15). Named here only so its presence can be detected.
+_BYPASS_FUNCTION = "_create_unverified_context"  # tls-audit-allow: detection only
+
+
 @dataclass
 class Check:
     name: str
@@ -258,7 +263,7 @@ def _tls_check(checks: list[Check]) -> None:
     context = ssl.create_default_context()
     ok = context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
     default = ssl._create_default_https_context
-    bypassed = getattr(default, "__name__", "") == "_create_unverified_context"
+    bypassed = getattr(default, "__name__", "") == _BYPASS_FUNCTION
     checks.append(Check(
         "tls verification", ok and not bypassed,
         "enabled" if ok and not bypassed else "DISABLED — model downloads are not authenticated",

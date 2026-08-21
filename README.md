@@ -54,6 +54,8 @@ A daemon started from a shell has no unit, so no identity, so no shortcut.
 | `dictator again [id]` | Deliver a stored transcript again |
 | `dictator status` | What the daemon is doing right now |
 | `dictator doctor` | Check every dependency and say what to fix |
+| `dictator stats` | Counters and measured latency percentiles |
+| `dictator health` | One-line verdict for monitoring; exits non-zero when degraded |
 | `dictator watch` | Live transcription as you speak |
 | `dictator meter` | Live input levels in the terminal |
 
@@ -181,6 +183,29 @@ or injecting input — any client can do both to any other, silently. Wayland's
 portal consent is not friction; it is the security property. X11 is supported
 because people run it, not because it is equivalent. `dictator doctor` reports
 which trust model is active.
+
+## Operating it
+
+`dictator health` is built for monitoring: it exits `0` when healthy or still
+starting, `1` when degraded, and `2` when the daemon is down. "Starting" is
+deliberately not a failure — a daemon waiting for you to approve a consent
+prompt is not broken, and restarting it would only re-ask the question.
+
+`dictator stats` reports what has actually been measured against the latency
+budgets, so the acceptance targets are checkable rather than claimed. Fewer
+than five samples reports `unknown` rather than a green tick.
+
+```bash
+dictator stats --prometheus     # scrapeable text exposition
+dictator stats --json
+```
+
+The service runs confined: `ProtectSystem=strict`, `ProtectHome=read-only`,
+`NoNewPrivileges`, a system-call filter, and a device allow-list narrow enough
+to leave only the sound card and the GPU reachable. `systemd-analyze --user
+security` scores it 4.6 ("OK"). `TimeoutStopSec=30` gives an utterance already
+being transcribed time to finish, because those words are the one thing a
+restart cannot recover.
 
 ## Development
 

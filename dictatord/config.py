@@ -31,6 +31,25 @@ from .errors import Fault, FaultCode
 
 APP = "dictator"
 
+#: Bumped whenever a setting is renamed, removed, or changes meaning. The
+#: first migration is always the one nobody planned for, so the machinery
+#: exists from version one even though there is nothing to migrate yet.
+SCHEMA_VERSION = 1
+
+#: old path -> new path, applied in order on load and on save.
+RENAMES: dict[str, str] = {}
+
+#: Settings that no longer exist, and what to tell someone still setting them.
+RETIRED: dict[str, str] = {
+    "ui.transparency": "the floating window was removed in v2",
+    "ui.always_on_top": "the floating window was removed in v2",
+    "ui.font_size": "the floating window was removed in v2",
+    "ui.theme": "the floating window was removed in v2",
+    "hotkey.combination": "renamed to shortcuts.dictate",
+    "whisper.model_size": "renamed to model.name",
+    "whisper.device": "renamed to model.device",
+}
+
 # --------------------------------------------------------------------------
 # paths
 # --------------------------------------------------------------------------
@@ -243,6 +262,8 @@ class Config:
     values: dict[str, Any] = field(default_factory=dict)
     sources: dict[str, str] = field(default_factory=dict)
     loaded_files: list[Path] = field(default_factory=list)
+    #: Settings that were renamed or retired while loading, for reporting.
+    migrations: list[str] = field(default_factory=list)
 
     def __getitem__(self, path: str) -> Any:
         try:
@@ -275,6 +296,27 @@ class Config:
 
 def defaults() -> Config:
     return Config(values={f.path: f.default for f in SCHEMA})
+
+
+def migrate(flat: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    """Apply renames and drop retired settings.
+
+    Returns the migrated mapping and a list of notes worth showing the user.
+    A stale config must never be a hard failure: someone upgrading should get
+    a working daemon and an explanation, not a refusal to start.
+    """
+    notes: list[str] = []
+    out: dict[str, Any] = {}
+    for key, value in flat.items():
+        if key in RETIRED:
+            notes.append(f"{key} is no longer used ({RETIRED[key]})")
+            continue
+        if key in RENAMES:
+            notes.append(f"{key} is now {RENAMES[key]}")
+            out[RENAMES[key]] = value
+            continue
+        out[key] = value
+    return out, notes
 
 
 def _flatten(data: dict, prefix: str = "") -> dict[str, Any]:
@@ -400,6 +442,9 @@ def load(
 
     problems: list[str] = []
     for origin, flat in layers:
+        flat, notes = migrate(flat)
+        for note in notes:
+            config.migrations.append(f"{origin}: {note}")
         for path, value in flat.items():
             spec = BY_PATH.get(path)
             if spec is None:
