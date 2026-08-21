@@ -1,0 +1,770 @@
+#!/usr/bin/env python3
+
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QDialog, QVBoxLayout, QHBoxLayout,
+    QSlider, QLabel, QPushButton, QLineEdit, QGridLayout
+)
+from PyQt6.QtGui import QColor, QPixmap, QPainter, QPen, QPolygon, QPalette
+from PyQt6.QtCore import Qt, QPoint
+
+
+class ColorPicker(QDialog):
+    def __init__(self, parent=None, initial_color=None):
+        super().__init__(parent)
+        self.setWindowTitle("Custom Color Picker")
+        self.setFixedSize(750, 500)  # Make window much bigger to prevent overlaps
+
+        if initial_color:
+            self.current_color = initial_color
+            self.original_color = QColor(initial_color)  # This is the PREVIOUS color - what we started with
+        else:
+            self.current_color = QColor(255, 0, 0)
+            self.original_color = QColor(255, 0, 0)  # Default starting color
+
+        # Performance caching
+        self.sb_gradient_cache = {}  # Cache gradients by hue
+        self.hue_bar_cache = None    # Cache the hue bar since it never changes
+        
+        # Get system colors for theming - CHECK GNOME SETTINGS FIRST
+        import subprocess
+        import os
+        
+        is_dark_theme = False
+        
+        # Check GNOME color scheme preference
+        try:
+            result = subprocess.run(['gsettings', 'get', 'org.gnome.desktop.interface', 'color-scheme'], 
+                                  capture_output=True, text=True, timeout=2)
+            if result.returncode == 0 and 'prefer-dark' in result.stdout:
+                is_dark_theme = True
+                print("GNOME DARK THEME DETECTED via gsettings")
+        except:
+            pass
+        
+        # Fallback: Check environment variables
+        if not is_dark_theme:
+            if os.environ.get('GTK_THEME', '').lower().find('dark') != -1:
+                is_dark_theme = True
+                print("DARK THEME DETECTED via GTK_THEME environment variable")
+        
+        # Use proper theme colors
+        palette = QApplication.palette()
+        
+        if is_dark_theme:
+            # Use dark theme colors
+            self.bg_color = "#2d2d2d"      # Dark gray background
+            self.text_color = "#ffffff"    # White text  
+            self.button_color = "#404040"  # Dark gray buttons
+            self.border_color = "#666666"  # Medium gray borders
+            self.dark_color = "#1a1a1a"    # Very dark for inset borders
+            self.light_color = "#555555"   # Lighter gray for raised borders
+            self.triangle_color = "#ffffff"  # White triangles for dark mode
+        else:
+            # Use light theme colors from Qt palette
+            self.bg_color = palette.color(QPalette.ColorRole.Window).name()
+            self.text_color = palette.color(QPalette.ColorRole.WindowText).name()
+            self.button_color = palette.color(QPalette.ColorRole.Button).name()
+            self.border_color = palette.color(QPalette.ColorRole.Mid).name()
+            self.dark_color = palette.color(QPalette.ColorRole.Dark).name()
+            self.light_color = palette.color(QPalette.ColorRole.Light).name()
+            self.triangle_color = "#000000"  # Black triangles for light mode
+        
+        # Debug: Print theme colors being used
+        print(f"THEME COLORS BEING USED:")
+        print(f"  Background: {self.bg_color}")
+        print(f"  Text: {self.text_color}")
+        print(f"  Button: {self.button_color}")
+        print(f"  Border: {self.border_color}")
+        print(f"  Dark: {self.dark_color}")
+        print(f"  Light: {self.light_color}")
+        
+        # Apply system theme to the dialog itself
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {self.bg_color};
+                color: {self.text_color};
+            }}
+            QLabel {{
+                color: {self.text_color};
+            }}
+            QPushButton {{
+                background-color: {self.button_color};
+                color: {self.text_color};
+                border: 1px solid {self.border_color};
+                padding: 4px;
+            }}
+            QPushButton:hover {{
+                background-color: {self.light_color};
+            }}
+            QLineEdit {{
+                background-color: {self.bg_color};
+                color: {self.text_color};
+                border: 1px solid {self.border_color};
+                padding: 2px;
+            }}
+        """)
+
+        main_layout = QHBoxLayout(self)  # Changed to horizontal main layout
+
+        # --- LEFT SIDE: Default color swatches ---
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.addWidget(QLabel("Default Colors:"))
+        
+        swatch_layout = QGridLayout()
+        self.swatches = [
+            # Row 1: GRAYS - Black to White
+            "#000000", "#111111", "#222222", "#333333", "#444444", "#555555", "#666666", "#777777", "#888888", "#999999", "#AAAAAA", "#BBBBBB", "#CCCCCC", "#DDDDDD", "#EEEEEE", "#FFFFFF",
+            
+            # Row 2: REDS - Clean Dark to Bright progression
+            "#110000", "#220000", "#330000", "#440000", "#550000", "#660000", "#770000", "#880000", "#990000", "#AA0000", "#BB0000", "#CC0000", "#DD0000", "#EE0000", "#FF0000", "#FF3333",
+            
+            # Row 3: GREENS - Clean Dark to Bright progression  
+            "#001100", "#002200", "#003300", "#004400", "#005500", "#006600", "#007700", "#008800", "#009900", "#00AA00", "#00BB00", "#00CC00", "#00DD00", "#00EE00", "#00FF00", "#33FF33",
+            
+            # Row 4: BLUES - Clean Dark to Bright progression
+            "#000011", "#000022", "#000033", "#000044", "#000055", "#000066", "#000077", "#000088", "#000099", "#0000AA", "#0000BB", "#0000CC", "#0000DD", "#0000EE", "#0000FF", "#3333FF",
+            
+            # Row 5: YELLOWS - Clean Dark to Bright progression
+            "#111100", "#222200", "#333300", "#444400", "#555500", "#666600", "#777700", "#888800", "#999900", "#AAAA00", "#BBBB00", "#CCCC00", "#DDDD00", "#EEEE00", "#FFFF00", "#FFFF33",
+            
+            # Row 6: MAGENTAS/PURPLES - Clean Dark to Bright progression
+            "#110011", "#220022", "#330033", "#440044", "#550055", "#660066", "#770077", "#880088", "#990099", "#AA00AA", "#BB00BB", "#CC00CC", "#DD00DD", "#EE00EE", "#FF00FF", "#FF33FF",
+            
+            # Row 7: CYANS - Clean Dark to Bright progression
+            "#001111", "#002222", "#003333", "#004444", "#005555", "#006666", "#007777", "#008888", "#009999", "#00AAAA", "#00BBBB", "#00CCCC", "#00DDDD", "#00EEEE", "#00FFFF", "#33FFFF",
+            
+            # Row 8: ORANGES - Clean Dark to Bright progression
+            "#221100", "#332200", "#443300", "#554400", "#665500", "#776600", "#887700", "#998800", "#AA9900", "#BBAA00", "#CCBB00", "#DDCC00", "#EEDD00", "#FFEE00", "#FFAA00", "#FF6600"
+        ]
+        
+        for i, c in enumerate(self.swatches):
+            btn = QPushButton()
+            btn.setStyleSheet(f"background-color: {c}; border: 1px solid {self.border_color};")
+            btn.setFixedSize(25, 25)  # Smaller swatches
+            btn.clicked.connect(lambda _, col=c: self.set_color(QColor(col)))
+            swatch_layout.addWidget(btn, i // 16, i % 16)
+        left_layout.addLayout(swatch_layout)
+        
+        # Add color history/custom colors section
+        left_layout.addSpacing(10)
+        left_layout.addWidget(QLabel("Custom Colors:"))
+        
+        custom_layout = QGridLayout()
+        self.custom_colors = ["#FFFFFF"] * 16  # Default to white, will be populated by calling function
+        self.custom_buttons = []
+        
+        for i in range(16):
+            btn = QPushButton()
+            # Depressed/inset border style for custom colors
+            btn.setStyleSheet(f"""
+                background-color: {self.custom_colors[i]}; 
+                border: 2px inset {self.border_color};
+                border-top-color: {self.dark_color};
+                border-left-color: {self.dark_color};
+                border-bottom-color: {self.light_color};
+                border-right-color: {self.light_color};
+            """)
+            btn.setFixedSize(25, 25)
+            btn.clicked.connect(lambda _, idx=i: self.select_custom_color(idx))
+            self.custom_buttons.append(btn)
+            custom_layout.addWidget(btn, i // 8, i % 8)  # 2 rows of 8
+        
+        left_layout.addLayout(custom_layout)
+        left_layout.addStretch()  # Push everything to top
+        
+        main_layout.addWidget(left_widget)
+
+        # --- RIGHT SIDE: Color selector and controls ---
+        right_widget = QWidget()
+        right_layout = QVBoxLayout(right_widget)
+
+        # --- Color picker area (Saturation/Brightness square + Hue bar) ---
+        picker_widget = QWidget()
+        picker_layout = QHBoxLayout(picker_widget)
+        picker_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Saturation/Brightness square (left)
+        self.sb_preview = QLabel()
+        self.sb_preview.setFixedSize(200, 200)
+        self.current_hue = 0  # Track current hue
+        self.sb_pos = [100, 100]  # Current position in SB square
+        self.update_sb_gradient()
+        self.sb_preview.mousePressEvent = self.pick_from_sb
+        self.sb_preview.mouseMoveEvent = self.pick_from_sb
+        picker_layout.addWidget(self.sb_preview)
+        
+        # Small gap
+        picker_layout.addSpacing(10)
+        
+        # Hue bar area with arrows - BIGGER to accommodate arrow padding
+        hue_widget = QWidget()
+        hue_widget.setFixedSize(44, 210)  # Bigger to fit padded arrows
+        hue_layout = QHBoxLayout(hue_widget)
+        hue_layout.setContentsMargins(0, 0, 0, 0)
+        hue_layout.setSpacing(0)
+        
+        # Left arrow - BIGGER with padding so triangles are never cut off
+        self.left_arrow = QLabel()
+        self.left_arrow.setFixedSize(12, 210)  # Bigger with padding (5px top/bottom)
+        hue_layout.addWidget(self.left_arrow)
+        
+        # Hue bar (center) - EXACT same height as SB square
+        self.hue_bar = QLabel()
+        self.hue_bar.setFixedSize(20, 200)  # Match SB square height
+        self.hue_pos = 0  # Current position in hue bar
+        self.update_hue_bar()
+        self.hue_bar.mousePressEvent = self.pick_from_hue
+        self.hue_bar.mouseMoveEvent = self.pick_from_hue
+        hue_layout.addWidget(self.hue_bar)
+        
+        # Right arrow - BIGGER with padding so triangles are never cut off
+        self.right_arrow = QLabel()
+        self.right_arrow.setFixedSize(12, 210)  # Bigger with padding (5px top/bottom)
+        hue_layout.addWidget(self.right_arrow)
+        
+        picker_layout.addWidget(hue_widget)
+        
+        # Initialize arrows
+        self.update_hue_arrows()
+        
+        # Small gap
+        picker_layout.addSpacing(5)
+        
+        # Color swatches (previous and current)
+        swatch_widget = QWidget()
+        swatch_layout = QVBoxLayout(swatch_widget)
+        swatch_layout.setContentsMargins(0, 0, 0, 0)
+        swatch_layout.setSpacing(2)
+        
+        # Current color swatch
+        current_label = QLabel("Current")
+        current_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        current_label.setStyleSheet("font-size: 10px; color: #666;")
+        swatch_layout.addWidget(current_label)
+        
+        self.current_swatch = QLabel()
+        self.current_swatch.setFixedSize(40, 50)
+        self.current_swatch.setStyleSheet(f"border: 2px solid {self.border_color}; background-color: #ff0000;")
+        swatch_layout.addWidget(self.current_swatch)
+        
+        # Previous color swatch
+        prev_label = QLabel("Previous")
+        prev_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        prev_label.setStyleSheet(f"font-size: 10px; color: {self.text_color};")
+        swatch_layout.addWidget(prev_label)
+        
+        self.previous_swatch = QLabel()
+        self.previous_swatch.setFixedSize(40, 50)
+        self.previous_swatch.setStyleSheet(f"border: 2px solid {self.border_color}; background-color: #ff0000;")
+        self.previous_swatch.mousePressEvent = self.revert_to_previous
+        swatch_layout.addWidget(self.previous_swatch)
+        
+        swatch_layout.addStretch()
+        picker_layout.addWidget(swatch_widget)
+        
+        picker_layout.addStretch()
+        right_layout.addWidget(picker_widget)
+        
+        # Add spacing to prevent overlaps
+        right_layout.addSpacing(20)
+
+        # --- RGBA sliders with editable text fields ---
+        self.sliders = {}
+        self.value_inputs = {}
+        for channel in ["R", "G", "B", "A"]:
+            hl = QHBoxLayout()
+            label = QLabel(f"{channel}:")
+            label.setFixedWidth(15)
+            
+            slider = QSlider(Qt.Orientation.Horizontal)
+            slider.setRange(0, 255)
+            
+            if channel == "A":
+                initial_value = self.current_color.alpha()
+            else:
+                initial_value = (self.current_color.red() if channel == "R" else
+                               self.current_color.green() if channel == "G" else
+                               self.current_color.blue())
+            
+            slider.setValue(initial_value)
+            slider.valueChanged.connect(lambda val, ch=channel: self.update_from_slider(ch, val))
+            self.sliders[channel] = slider
+            
+            # Editable text input for RGBA values
+            value_input = QLineEdit(str(initial_value))
+            value_input.setFixedWidth(50)
+            value_input.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            value_input.editingFinished.connect(lambda ch=channel: self.update_from_rgba_input(ch))
+            self.value_inputs[channel] = value_input
+            
+            hl.addWidget(label)
+            hl.addWidget(slider)
+            hl.addWidget(value_input)
+            right_layout.addLayout(hl)
+
+        # --- Hex input and RGB display ---
+        info_layout = QHBoxLayout()
+        
+        # Hex input
+        hex_layout = QVBoxLayout()
+        hex_layout.addWidget(QLabel("Hex:"))
+        self.hex_input = QLineEdit(self.current_color.name())
+        self.hex_input.editingFinished.connect(self.update_from_hex)
+        self.hex_input.setFixedWidth(80)
+        hex_layout.addWidget(self.hex_input)
+        info_layout.addLayout(hex_layout)
+        
+        info_layout.addStretch()
+        
+        # RGBA display
+        rgba_layout = QVBoxLayout()
+        rgba_layout.addWidget(QLabel("RGBA:"))
+        self.rgba_label = QLabel("255, 0, 0, 255")
+        self.rgba_label.setStyleSheet(f"font-family: monospace; background: {self.bg_color}; color: {self.text_color}; padding: 5px; border: 1px solid {self.border_color};")
+        rgba_layout.addWidget(self.rgba_label)
+        info_layout.addLayout(rgba_layout)
+        
+        right_layout.addLayout(info_layout)
+        
+        # Add spacing before buttons
+        right_layout.addSpacing(15)
+
+        # --- OK/Cancel buttons ---
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        ok_btn = QPushButton("OK")
+        cancel_btn = QPushButton("Cancel")
+        ok_btn.clicked.connect(self.accept)
+        cancel_btn.clicked.connect(self.reject)
+        btn_layout.addWidget(ok_btn)
+        btn_layout.addWidget(cancel_btn)
+        right_layout.addLayout(btn_layout)
+        
+        main_layout.addWidget(right_widget)
+        
+        # Update initial display and selectors
+        self.update_displays()
+        self.update_initial_selectors()
+        
+        # Ensure selectors are always visible from start
+        self.update_sb_with_selector()
+        self.update_hue_with_selector()
+        
+        # Initialize color swatches properly (Current and Previous)
+        self.update_color_swatches()
+
+    def update_hue_bar(self):
+        """Create vertical hue bar (rainbow) - CACHED for performance"""
+        if self.hue_bar_cache is not None:
+            self.hue_bar.setPixmap(self.hue_bar_cache)
+            return
+            
+        pixmap = QPixmap(self.hue_bar.size())
+        painter = QPainter(pixmap)
+        
+        # Fill entire hue bar with gradient - no space for arrows since they're separate widgets
+        for y in range(pixmap.height()):
+            hue = int(360 * y / pixmap.height())
+            color = QColor.fromHsv(hue, 255, 255)
+            painter.setPen(color)
+            painter.drawLine(0, y, pixmap.width()-1, y)
+            
+        painter.end()
+        
+        # Cache the hue bar since it never changes
+        self.hue_bar_cache = pixmap.copy()
+        self.hue_bar.setPixmap(pixmap)
+    
+    def update_sb_gradient(self):
+        """Create saturation/brightness square - CACHED for performance"""
+        # Check cache first - cache by hue (rounded to nearest 5 degrees for efficiency)
+        cache_key = (self.current_hue // 5) * 5
+        
+        if cache_key in self.sb_gradient_cache:
+            self.sb_preview.setPixmap(self.sb_gradient_cache[cache_key])
+            return
+            
+        pixmap = QPixmap(self.sb_preview.size())
+        painter = QPainter(pixmap)
+        
+        # Use fewer color steps for performance - 50x50 instead of 200x200
+        step = 4  # Every 4 pixels
+        for x in range(0, pixmap.width(), step):
+            for y in range(0, pixmap.height(), step):
+                saturation = int(255 * x / pixmap.width())
+                brightness = int(255 * (pixmap.height() - y) / pixmap.height())
+                color = QColor.fromHsv(self.current_hue, saturation, brightness)
+                painter.fillRect(x, y, step, step, color)
+                
+        painter.end()
+        
+        # Cache the gradient (limit cache size to prevent memory issues)
+        if len(self.sb_gradient_cache) > 20:
+            # Clear oldest entries when cache gets too big
+            oldest_key = min(self.sb_gradient_cache.keys())
+            del self.sb_gradient_cache[oldest_key]
+            
+        self.sb_gradient_cache[cache_key] = pixmap.copy()
+        self.sb_preview.setPixmap(pixmap)
+    
+    def update_sb_with_selector(self):
+        """Update SB gradient and draw selector - OPTIMIZED"""
+        self.update_sb_gradient()  # Use cached gradient
+        
+        if hasattr(self, 'sb_preview') and self.sb_preview.pixmap():
+            pixmap = self.sb_preview.pixmap().copy()
+            painter = QPainter(pixmap)
+            
+            x, y = int(self.sb_pos[0]), int(self.sb_pos[1])
+            
+            # Get the color at this position to invert it
+            saturation = int(255 * x / self.sb_preview.width())
+            brightness = int(255 * (self.sb_preview.height() - y) / self.sb_preview.height())
+            underlying_color = QColor.fromHsv(self.current_hue, saturation, brightness)
+            
+            # Use inverse color - if dark use white, if light use black
+            if underlying_color.lightness() < 128:
+                selector_color = Qt.GlobalColor.white
+            else:
+                selector_color = Qt.GlobalColor.black
+            
+            # Draw tight-fitting rectangle around selected pixel area
+            painter.setPen(QPen(selector_color, 1))
+            painter.drawRect(x-2, y-2, 4, 4)
+            
+            painter.end()
+            self.sb_preview.setPixmap(pixmap)
+    
+    def update_hue_arrows(self):
+        """Update the separate arrow widgets to show current hue position"""
+        if not hasattr(self, 'left_arrow') or not hasattr(self, 'right_arrow'):
+            return
+            
+        # Center triangles on selected hue position, accounting for padding
+        y = int(self.hue_pos) + 5  # Add 5px offset for the padding
+        
+        # Create left arrow pixmap (pointing right) - SOLID FILLED TRIANGLE
+        left_pixmap = QPixmap(self.left_arrow.size())
+        left_pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(left_pixmap)
+        
+        # Solid triangle with theme-appropriate color
+        painter.setPen(Qt.PenStyle.NoPen)  # No outline
+        painter.setBrush(QColor(self.triangle_color))
+        left_triangle = QPolygon([
+            QPoint(0, y-4),
+            QPoint(0, y+4),
+            QPoint(6, y)
+        ])
+        painter.drawPolygon(left_triangle)
+        painter.end()
+        
+        self.left_arrow.setPixmap(left_pixmap)
+        
+        # Create right arrow pixmap (pointing left) - SOLID FILLED TRIANGLE
+        right_pixmap = QPixmap(self.right_arrow.size())
+        right_pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(right_pixmap)
+        
+        w = self.right_arrow.width()
+        # Solid triangle with theme-appropriate color
+        painter.setPen(Qt.PenStyle.NoPen)  # No outline
+        painter.setBrush(QColor(self.triangle_color))
+        right_triangle = QPolygon([
+            QPoint(w-1, y-4),
+            QPoint(w-1, y+4),
+            QPoint(w-7, y)
+        ])
+        painter.drawPolygon(right_triangle)
+        painter.end()
+        
+        self.right_arrow.setPixmap(right_pixmap)
+    
+    def update_hue_with_selector(self):
+        """Update hue bar (clean, no arrows drawn on it)"""
+        self.update_hue_bar()  # Regenerate clean hue bar
+        self.update_hue_arrows()  # Update separate arrow widgets
+
+    def pick_from_hue(self, event):
+        """Pick hue from vertical hue bar"""
+        y = event.position().y()
+        h = self.hue_bar.height()
+        self.current_hue = int(360 * y / h)
+        self.current_hue = max(0, min(359, self.current_hue))
+        
+        # Update hue position for selector
+        self.hue_pos = max(0, min(h-1, y))
+        
+        # Update the saturation/brightness square with new hue
+        self.update_sb_with_selector()
+        
+        # Get current saturation and brightness from current color
+        current_hsv = self.current_color.getHsv()
+        sat = current_hsv[1] if current_hsv[1] >= 0 else 255
+        val = current_hsv[2] if current_hsv[2] >= 0 else 255
+        
+        # Set new color with new hue
+        self.set_color(QColor.fromHsv(self.current_hue, sat, val))
+        
+        # Update hue bar with selector
+        self.update_hue_with_selector()
+
+    def pick_from_sb(self, event):
+        """Pick saturation/brightness from square - NEVER changes hue"""
+        x, y = event.position().x(), event.position().y()
+        w, h = self.sb_preview.width(), self.sb_preview.height()
+        
+        saturation = int(255 * x / w)
+        brightness = int(255 * (h - y) / h)  # Inverted Y
+        
+        saturation = max(0, min(255, saturation))
+        brightness = max(0, min(255, brightness))
+        
+        # Update SB position for selector
+        self.sb_pos = [max(0, min(w-1, x)), max(0, min(h-1, y))]
+        
+        # KEEP the current hue and alpha, only change saturation/brightness
+        new_color = QColor.fromHsv(self.current_hue, saturation, brightness)
+        new_color.setAlpha(self.current_color.alpha())  # Preserve alpha
+        self.current_color = new_color
+        self.update_displays()
+        self.update_color_swatches()
+        
+        # Update SB square with selector (don't call set_color which would recalculate hue)
+        self.update_sb_with_selector()
+
+    def update_from_slider(self, channel, value):
+        """Update color when slider changes - NEVER changes hue"""
+        # Update the corresponding text input
+        self.value_inputs[channel].setText(str(value))
+        
+        # Get all RGBA values and update color WITHOUT changing hue
+        r = self.sliders["R"].value()
+        g = self.sliders["G"].value()  
+        b = self.sliders["B"].value()
+        a = self.sliders["A"].value()
+        color = QColor(r, g, b, a)
+        self.set_color(color, update_hue=False)
+    
+    def update_from_rgba_input(self, channel):
+        """Update color when RGBA text input changes"""
+        try:
+            # Get value from text input and clamp to 0-255
+            value = int(self.value_inputs[channel].text())
+            value = max(0, min(255, value))  # Clamp to valid range
+            
+            # Update text input with clamped value
+            self.value_inputs[channel].setText(str(value))
+            
+            # Update corresponding slider
+            self.sliders[channel].setValue(value)
+            
+            # Get all RGBA values and update color WITHOUT changing hue
+            r = int(self.value_inputs["R"].text())
+            g = int(self.value_inputs["G"].text())
+            b = int(self.value_inputs["B"].text())
+            a = int(self.value_inputs["A"].text())
+            color = QColor(r, g, b, a)
+            self.set_color(color, update_hue=False)
+            
+        except ValueError:
+            # If invalid input, reset to current slider value
+            self.value_inputs[channel].setText(str(self.sliders[channel].value()))
+
+    def update_from_hex(self):
+        """Update from hex input - NEVER changes hue, supports RGBA hex"""
+        text = self.hex_input.text()
+        
+        # Handle both 6-digit (#RRGGBB) and 8-digit (#RRGGBBAA) hex
+        if len(text) == 9 and text.startswith('#'):  # #RRGGBBAA format
+            try:
+                r = int(text[1:3], 16)
+                g = int(text[3:5], 16)  
+                b = int(text[5:7], 16)
+                a = int(text[7:9], 16)
+                color = QColor(r, g, b, a)
+                self.set_color(color, update_hue=False)
+            except ValueError:
+                pass  # Invalid hex, ignore
+        elif QColor.isValidColor(text):
+            # Standard 6-digit hex, preserve current alpha
+            color = QColor(text)
+            color.setAlpha(self.current_color.alpha())
+            self.set_color(color, update_hue=False)
+
+    def set_color(self, color, update_hue=True):
+        # Don't change the original color - that stays the same as when picker opened
+        self.current_color = color
+        
+        # Only update hue and selectors if this is from a preset color selection
+        if update_hue:
+            hsv = color.getHsv()
+            if hsv[0] >= 0:  # Valid hue
+                self.current_hue = hsv[0]
+                self.hue_pos = self.current_hue * self.hue_bar.height() / 360
+                
+                # Set SB position
+                if hsv[1] >= 0 and hsv[2] >= 0:
+                    sat_pos = hsv[1] * self.sb_preview.width() / 255
+                    bright_pos = (255 - hsv[2]) * self.sb_preview.height() / 255
+                    self.sb_pos = [sat_pos, bright_pos]
+            
+            # Update visual selectors to show the new color
+            self.update_sb_with_selector()
+            self.update_hue_with_selector()
+        
+        self.update_displays()
+        self.update_color_swatches()
+
+    def update_displays(self):
+        """Update all displays when color changes"""
+        color = self.current_color
+        
+        # Update hex input - show 8-digit hex if alpha < 255
+        if color.alpha() < 255:
+            hex_color = f"#{color.red():02x}{color.green():02x}{color.blue():02x}{color.alpha():02x}"
+        else:
+            hex_color = color.name()  # Standard 6-digit hex
+        self.hex_input.setText(hex_color)
+        
+        # Update sliders
+        self.sliders["R"].setValue(color.red())
+        self.sliders["G"].setValue(color.green())
+        self.sliders["B"].setValue(color.blue())
+        self.sliders["A"].setValue(color.alpha())
+        
+        # Update RGBA text inputs
+        self.value_inputs["R"].setText(str(color.red()))
+        self.value_inputs["G"].setText(str(color.green()))
+        self.value_inputs["B"].setText(str(color.blue()))
+        self.value_inputs["A"].setText(str(color.alpha()))
+        
+        # Update RGBA display
+        self.rgba_label.setText(f"{color.red()}, {color.green()}, {color.blue()}, {color.alpha()}")
+        
+        self.update()
+    
+    def update_initial_selectors(self):
+        """Set up initial selector positions based on current color"""
+        # Set initial positions based on current color
+        hsv = self.current_color.getHsv()
+        if hsv[0] >= 0:  # Valid hue
+            self.current_hue = hsv[0]
+            self.hue_pos = self.current_hue * self.hue_bar.height() / 360
+            
+            # Set SB position
+            if hsv[1] >= 0 and hsv[2] >= 0:
+                sat_pos = hsv[1] * self.sb_preview.width() / 255
+                bright_pos = (255 - hsv[2]) * self.sb_preview.height() / 255
+                self.sb_pos = [sat_pos, bright_pos]
+        else:
+            # Default positions
+            self.current_hue = 0
+            self.hue_pos = 0
+            self.sb_pos = [100, 100]
+        
+        # Draw initial selectors
+        self.update_sb_with_selector()
+        self.update_hue_with_selector()
+        self.update_hue_arrows()
+    
+    def update_color_swatches(self):
+        """Update the current and previous color swatches"""
+        if hasattr(self, 'current_swatch'):
+            current_color = self.current_color.name()
+            self.current_swatch.setStyleSheet(f"border: 2px solid {self.border_color}; background-color: {current_color};")
+        
+        if hasattr(self, 'previous_swatch') and hasattr(self, 'original_color'):
+            # Previous = original color when picker was opened
+            original_color = self.original_color.name()
+            self.previous_swatch.setStyleSheet(f"border: 2px solid {self.border_color}; background-color: {original_color};")
+    
+    def revert_to_previous(self, event):
+        """Click on previous color swatch to revert to original color"""
+        if hasattr(self, 'original_color'):
+            self.current_color = self.original_color
+            
+            self.update_displays()
+            self.update_color_swatches()
+            self.update_initial_selectors()  # This handles both SB and hue selectors properly
+
+    def get_color_int(self):
+        return self.current_color.rgb()
+
+    def get_color_hex(self):
+        # Return 8-digit hex if alpha < 255, otherwise standard 6-digit
+        if self.current_color.alpha() < 255:
+            return f"#{self.current_color.red():02x}{self.current_color.green():02x}{self.current_color.blue():02x}{self.current_color.alpha():02x}"
+        else:
+            return self.current_color.name()
+    
+    def get_color_rgba(self):
+        """Get color as RGBA tuple (r, g, b, a)"""
+        return (self.current_color.red(), self.current_color.green(), 
+                self.current_color.blue(), self.current_color.alpha())
+    
+    def get_color_rgba_int(self):
+        """Get color as RGBA integer"""
+        return self.current_color.rgba()
+    
+    def select_custom_color(self, index):
+        """Select a color from the custom color history"""
+        if 0 <= index < len(self.custom_colors):
+            color_hex = self.custom_colors[index]
+            self.set_color(QColor(color_hex))
+    
+    def set_custom_colors(self, colors):
+        """Set the custom color history - called by the parent application"""
+        if not colors:
+            return
+            
+        # Update the custom_colors list (pad with white if needed)
+        self.custom_colors = (colors + ["#FFFFFF"] * 16)[:16]
+        
+        # Update the button styles
+        if hasattr(self, 'custom_buttons'):
+            for i, btn in enumerate(self.custom_buttons):
+                if i < len(self.custom_colors):
+                    color_hex = self.custom_colors[i]
+                    btn.setStyleSheet(f"""
+                        background-color: {color_hex}; 
+                        border: 2px inset {self.border_color};
+                        border-top-color: {self.dark_color};
+                        border-left-color: {self.dark_color};
+                        border-bottom-color: {self.light_color};
+                        border-right-color: {self.light_color};
+                    """)
+    
+    def get_custom_colors(self):
+        """Get the current custom color history"""
+        return self.custom_colors.copy()
+    
+    def add_to_custom_colors(self, color_hex):
+        """Add a color to the custom color history (moves to front, removes duplicates)"""
+        if color_hex in self.custom_colors:
+            # Remove existing instance
+            self.custom_colors.remove(color_hex)
+        
+        # Add to front
+        self.custom_colors.insert(0, color_hex)
+        
+        # Keep only 16 colors
+        self.custom_colors = self.custom_colors[:16]
+        
+        # Update button display
+        if hasattr(self, 'custom_buttons'):
+            for i, btn in enumerate(self.custom_buttons):
+                if i < len(self.custom_colors):
+                    color = self.custom_colors[i]
+                    btn.setStyleSheet(f"""
+                        background-color: {color}; 
+                        border: 2px inset {self.border_color};
+                        border-top-color: {self.dark_color};
+                        border-left-color: {self.dark_color};
+                        border-bottom-color: {self.light_color};
+                        border-right-color: {self.light_color};
+                    """)
+
+
+# Module can be imported and used in other applications
