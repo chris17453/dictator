@@ -43,6 +43,18 @@ jobs:
         # A session bus so D-Bus code paths are exercised rather than skipped.
         run: dbus-run-session -- uv run pytest -q
 
+      - name: Generated docs must be committed
+        # configuration.md and dbus-api.md come from the schema and the
+        # interface. A stale copy is a documentation bug that ships.
+        run: |
+          uv run python scripts/gen_docs.py
+          if ! git diff --quiet -- docs/; then
+            echo "::error::docs are stale — run 'make docs' and commit"
+            git diff --stat -- docs/
+            exit 1
+          fi
+          echo "docs are current"
+
       - name: Verify the daemon starts headless and answers
         run: |
           dbus-run-session -- bash -euo pipefail -c '

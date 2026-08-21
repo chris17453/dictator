@@ -1,4 +1,4 @@
-.PHONY: help install dev setup uninstall run daemon test test-all lint doctor status logs clean sample
+.PHONY: help install dev setup uninstall run daemon test test-all lint doctor status logs clean sample docs
 
 PYTHON := python3
 UV     := uv
@@ -43,6 +43,9 @@ status: ## Show what the daemon is doing
 
 logs: ## Follow the service log
 	journalctl --user -u $(UNIT) -f -o cat
+
+docs: ## Regenerate the reference pages that are produced from code
+	$(UV) run python scripts/gen_docs.py
 
 sample: ## Print a fully commented configuration file
 	$(UV) run dictator config sample
